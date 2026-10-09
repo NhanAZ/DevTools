@@ -1,4 +1,4 @@
-name: Build plugin
+name: Build and validate plugin PHAR
 
 on:
   workflow_call:

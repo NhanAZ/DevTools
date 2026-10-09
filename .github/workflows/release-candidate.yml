@@ -1,4 +1,4 @@
-name: Release candidate
+name: Validate DevTools release candidate
 
 on:
   workflow_dispatch:

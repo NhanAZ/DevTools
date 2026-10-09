@@ -1,4 +1,4 @@
-name: Compatibility
+name: Check Axolotl-PM compatibility
 
 on:
   schedule:
