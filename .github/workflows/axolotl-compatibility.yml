@@ -122,7 +122,11 @@ jobs:
         env:
           PHAR_PATH: ${{ steps.build.outputs.phar }}
           BUILD_METADATA: ${{ steps.build.outputs.metadata }}
-        run: php compatibility/VisibleBorder/tools/verify-build.php "$PHAR_PATH" "$BUILD_METADATA" compatibility/VisibleBorder/virions/libRegRsp
+        run: |
+          set -euo pipefail
+          php compatibility/VisibleBorder/tools/verify-build.php "$PHAR_PATH" "$BUILD_METADATA" compatibility/VisibleBorder/virions/libRegRsp
+          mkdir -p compatibility/evidence
+          cp "$BUILD_METADATA" compatibility/evidence/devtools-build.json
 
       - name: Download exact stable server PHAR
         if: steps.release.outputs.candidate == 'true'
@@ -225,7 +229,7 @@ jobs:
           path: |
             compatibility/runtime/console.log
             compatibility/runtime/result.json
-            compatibility/build/devtools-build.json
+            compatibility/evidence/devtools-build.json
           if-no-files-found: warn
           retention-days: 30
 
