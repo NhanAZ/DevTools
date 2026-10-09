@@ -1,4 +1,5 @@
-name: Promote verified DevTools release candidate
+name: Release
+run-name: Release - ${{ inputs.tag }}
 
 on:
   workflow_dispatch:

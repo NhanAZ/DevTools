@@ -1,4 +1,5 @@
-name: Build DevTools release candidate
+name: Release candidate
+run-name: Release candidate - ${{ github.ref_name }} - ${{ github.event_name }}
 
 on:
   workflow_dispatch:
