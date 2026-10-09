@@ -1,5 +1,4 @@
 name: Compatibility
-run-name: Compatibility - ${{ github.ref_name }} - ${{ github.event_name }}
 
 on:
   schedule:

@@ -1,5 +1,4 @@
 name: Build plugin
-run-name: Build plugin - ${{ github.ref_name }} - ${{ github.event_name }}
 
 on:
   workflow_call:

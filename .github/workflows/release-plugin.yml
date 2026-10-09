@@ -1,5 +1,4 @@
 name: Plugin release
-run-name: Plugin release - ${{ github.ref_name }} - ${{ github.event_name }}
 
 on:
   workflow_call:
