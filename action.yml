@@ -1,0 +1,233 @@
+name: Build Axolotl-PM plugin PHAR
+description: Build a standalone Axolotl-PM plugin PHAR with optional local virions and opt-in PHPStan analysis.
+author: NhanAZ
+
+inputs:
+  project:
+    description: Plugin project path, relative to the checked-out repository or absolute.
+    required: false
+    default: .
+  virions:
+    description: Local virion directory, relative to the checked-out repository or absolute.
+    required: false
+    default: virions
+  output:
+    description: Build output directory, relative to the checked-out repository or absolute.
+    required: false
+    default: build
+  overwrite:
+    description: Replace an existing PHAR in the output directory.
+    required: false
+    default: "false"
+  prepare-dependencies:
+    description: Explicitly install locked Composer runtime packages with scripts and plugins disabled and prepare supported virions.
+    required: false
+    default: "false"
+  phpstan:
+    description: PHPStan level 0 through 10 or max. Omit this input or use off to disable PHPStan.
+    required: false
+    default: "off"
+  phpstan-server:
+    description: One or more newline-separated local server source checkouts analyzed independently when PHPStan is enabled.
+    required: false
+    default: ""
+  phpstan-paths:
+    description: Optional newline-separated local source directories for plugin or library dependencies.
+    required: false
+    default: ""
+
+outputs:
+  phar:
+    description: Absolute path to the validated PHAR.
+    value: ${{ steps.build.outputs.phar }}
+  plugin-name:
+    description: Plugin name read from the validated plugin.yml.
+    value: ${{ steps.build.outputs.plugin-name }}
+  plugin-version:
+    description: Plugin version from the build result.
+    value: ${{ steps.build.outputs.plugin-version }}
+  sha256:
+    description: SHA-256 of the exact PHAR.
+    value: ${{ steps.build.outputs.sha256 }}
+  metadata:
+    description: Absolute path to the versioned CLI JSON build result.
+    value: ${{ steps.build.outputs.metadata }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install locked DevTools builder dependencies
+      shell: bash
+      env:
+        DEVTOOLS_ACTION_PATH: ${{ github.action_path }}
+      run: >-
+        composer install
+        --working-dir="$DEVTOOLS_ACTION_PATH"
+        --prefer-dist
+        --no-interaction
+        --no-progress
+        --no-scripts
+        --no-plugins
+
+    - name: Explicitly prepare locked Composer virions
+      shell: bash
+      env:
+        DEVTOOLS_ACTION_PATH: ${{ github.action_path }}
+        INPUT_PREPARE: ${{ inputs.prepare-dependencies }}
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_VIRIONS: ${{ inputs.virions }}
+      run: |
+        set -euo pipefail
+        case "$INPUT_PREPARE" in
+          false) exit 0 ;;
+          true) ;;
+          *) echo "Input prepare-dependencies must be true or false." >&2; exit 2 ;;
+        esac
+        PROJECT_PATH="$GITHUB_WORKSPACE/$INPUT_PROJECT"
+        VIRIONS_PATH="$GITHUB_WORKSPACE/$INPUT_VIRIONS"
+        case "$INPUT_PROJECT" in /*) PROJECT_PATH="$INPUT_PROJECT" ;; esac
+        case "$INPUT_VIRIONS" in /*) VIRIONS_PATH="$INPUT_VIRIONS" ;; esac
+        if [ -f "$PROJECT_PATH/composer.json" ]; then
+          if [ ! -f "$PROJECT_PATH/composer.lock" ]; then
+            echo "Dependency preparation requires a committed composer.lock. Resolve dependencies locally first." >&2
+            exit 1
+          fi
+          composer install --working-dir="$PROJECT_PATH" --no-dev --no-scripts --no-plugins --prefer-dist --no-interaction --no-progress
+        fi
+        php "$DEVTOOLS_ACTION_PATH/bin/devtools.php" prepare "--project=$PROJECT_PATH" "--virions=$VIRIONS_PATH" --json
+
+    - name: Run opt-in PHPStan analysis
+      shell: bash
+      env:
+        DEVTOOLS_ACTION_PATH: ${{ github.action_path }}
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_VIRIONS: ${{ inputs.virions }}
+        INPUT_PHPSTAN: ${{ inputs.phpstan }}
+        INPUT_PHPSTAN_SERVER: ${{ inputs.phpstan-server }}
+        INPUT_PHPSTAN_PATHS: ${{ inputs.phpstan-paths }}
+      run: |
+        set -euo pipefail
+
+        resolve_from_workspace() {
+          case "$1" in
+            /*) printf '%s\n' "$1" ;;
+            *) printf '%s/%s\n' "$GITHUB_WORKSPACE" "$1" ;;
+          esac
+        }
+
+        case "$INPUT_PHPSTAN" in
+          off)
+            echo "PHPStan is disabled. Set phpstan to 0-10 or max to enable it."
+            exit 0
+            ;;
+          0|1|2|3|4|5|6|7|8|9|10|max) ;;
+          *)
+            echo "Input phpstan must be off, a number from 0 through 10, or max. Received $INPUT_PHPSTAN." >&2
+            exit 2
+            ;;
+        esac
+
+        PROJECT_PATH="$(resolve_from_workspace "$INPUT_PROJECT")"
+        VIRIONS_PATH="$(resolve_from_workspace "$INPUT_VIRIONS")"
+        SERVER_PATHS=()
+        while IFS= read -r server_path || [ -n "$server_path" ]; do
+          server_path="${server_path%$'\r'}"
+          if [ -n "$server_path" ]; then
+            SERVER_PATHS+=("$(resolve_from_workspace "$server_path")")
+          fi
+        done <<< "$INPUT_PHPSTAN_SERVER"
+        if [ "${#SERVER_PATHS[@]}" -eq 0 ]; then
+          echo "Input phpstan-server is required when PHPStan is enabled. Check out one or more server source repositories and pass their local paths." >&2
+          exit 2
+        fi
+
+        PHPSTAN_SCAN_ARGS=()
+        while IFS= read -r scan_path || [ -n "$scan_path" ]; do
+          scan_path="${scan_path%$'\r'}"
+          if [ -n "$scan_path" ]; then
+            PHPSTAN_SCAN_ARGS+=("--scan-path=$(resolve_from_workspace "$scan_path")")
+          fi
+        done <<< "$INPUT_PHPSTAN_PATHS"
+
+        server_index=0
+        for SERVER_PATH in "${SERVER_PATHS[@]}"; do
+          server_index=$((server_index + 1))
+          if [ ! -f "$SERVER_PATH/composer.json" ] || [ ! -d "$SERVER_PATH/src" ]; then
+            echo "Each phpstan-server path must contain composer.json and src/. Check $SERVER_PATH." >&2
+            exit 2
+          fi
+
+          echo "Running PHPStan level $INPUT_PHPSTAN against server source $SERVER_PATH ($server_index of ${#SERVER_PATHS[@]})."
+          composer install \
+            --working-dir="$SERVER_PATH" \
+            --no-dev \
+            --prefer-dist \
+            --no-interaction \
+            --no-progress \
+            --no-scripts \
+            --no-plugins \
+            --ignore-platform-reqs
+
+          PHPSTAN_CONFIG="$RUNNER_TEMP/devtools-phpstan-$server_index.neon"
+          php "$DEVTOOLS_ACTION_PATH/bin/devtools-phpstan-config.php" \
+            "--project=$PROJECT_PATH" \
+            "--server=$SERVER_PATH" \
+            "--virions=$VIRIONS_PATH" \
+            "--level=$INPUT_PHPSTAN" \
+            "--out=$PHPSTAN_CONFIG" \
+            "--tmp-dir=$RUNNER_TEMP/devtools-phpstan-cache-$server_index" \
+            "${PHPSTAN_SCAN_ARGS[@]}"
+          php "$DEVTOOLS_ACTION_PATH/vendor/phpstan/phpstan/phpstan" analyse \
+            --configuration="$PHPSTAN_CONFIG" \
+            --no-progress \
+            --error-format=table \
+            --memory-limit=1G
+        done
+
+    - name: Build standalone PHAR
+      id: build
+      shell: bash
+      env:
+        DEVTOOLS_ACTION_PATH: ${{ github.action_path }}
+        INPUT_PROJECT: ${{ inputs.project }}
+        INPUT_VIRIONS: ${{ inputs.virions }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_OVERWRITE: ${{ inputs.overwrite }}
+      run: |
+        set -euo pipefail
+
+        resolve_from_workspace() {
+          case "$1" in
+            /*) printf '%s\n' "$1" ;;
+            *) printf '%s/%s\n' "$GITHUB_WORKSPACE" "$1" ;;
+          esac
+        }
+
+        PROJECT_PATH="$(resolve_from_workspace "$INPUT_PROJECT")"
+        VIRIONS_PATH="$(resolve_from_workspace "$INPUT_VIRIONS")"
+        OUTPUT_PATH="$(resolve_from_workspace "$INPUT_OUTPUT")"
+        BUILD_ARGS=(
+          "--project=$PROJECT_PATH"
+          "--virions=$VIRIONS_PATH"
+          "--out=$OUTPUT_PATH"
+        )
+
+        case "$INPUT_OVERWRITE" in
+          true) BUILD_ARGS+=(--overwrite) ;;
+          false) ;;
+          *)
+            echo "Input overwrite must be true or false. Received $INPUT_OVERWRITE." >&2
+            exit 2
+            ;;
+        esac
+
+        METADATA_PATH="$(mktemp "$RUNNER_TEMP/devtools-build-XXXXXXXX.json")"
+        if ! php -d phar.readonly=0 "$DEVTOOLS_ACTION_PATH/bin/devtools.php" build --json "${BUILD_ARGS[@]}" > "$METADATA_PATH"; then
+          cat "$METADATA_PATH" >&2
+          exit 1
+        fi
+        node "$DEVTOOLS_ACTION_PATH/.github/scripts/artifact-contract.mjs" build "$METADATA_PATH"
+
+branding:
+  icon: package
+  color: blue

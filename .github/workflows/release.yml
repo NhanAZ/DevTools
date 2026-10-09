@@ -1,0 +1,90 @@
+name: Promote verified DevTools release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate-run-id:
+        description: Successful release-candidate workflow run reviewed before tagging.
+        required: true
+        type: string
+      artifact-id:
+        description: Immutable candidate artifact ID shown in that run summary.
+        required: true
+        type: string
+      tag:
+        description: Existing version tag pointing to the candidate source commit.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: promote-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    name: Verify and publish existing bytes
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Check out promotion verifier
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve and verify candidate identity
+        id: candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate-run-id }}
+          CANDIDATE_ARTIFACT_ID: ${{ inputs.artifact-id }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .github/scripts/release-candidate.mjs resolve "$RUNNER_TEMP/candidate-identity.json"
+
+      - name: Download and verify the exact reviewed archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node .github/scripts/release-candidate.mjs download "$RUNNER_TEMP/candidate-identity.json" "$RUNNER_TEMP/candidate.zip"
+          mkdir "$RUNNER_TEMP/candidate"
+          unzip -q "$RUNNER_TEMP/candidate.zip" -d "$RUNNER_TEMP/candidate"
+
+      - name: Verify provenance and every asset hash
+        id: verify
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node .github/scripts/release-candidate.mjs verify "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/candidate-identity.json"
+
+      - name: Publish the verified bytes without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          VERSION: ${{ steps.verify.outputs.version }}
+          PRERELEASE: ${{ steps.verify.outputs.prerelease }}
+          ASSETS: ${{ runner.temp }}/candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLAGS=(--verify-tag)
+          if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); else FLAGS+=(--latest); fi
+          gh release create "$RELEASE_TAG" \
+            "$ASSETS/DevTools-$VERSION.phar" \
+            "$ASSETS/DevTools-examples-$VERSION.zip" \
+            "$ASSETS/RELEASE_NOTES.md" \
+            "$ASSETS/candidate.json" \
+            "$ASSETS/SHA256SUMS.txt" \
+            --title "DevTools $VERSION" \
+            --notes-file "$ASSETS/RELEASE_NOTES.md" "${FLAGS[@]}"

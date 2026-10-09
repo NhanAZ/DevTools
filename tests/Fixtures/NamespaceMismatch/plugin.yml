@@ -1,0 +1,5 @@
+name: NamespaceMismatch
+version: 1.0.0
+main: Expected\Plugin\Main
+api: 5.0.0
+src-namespace-prefix: Expected\Plugin

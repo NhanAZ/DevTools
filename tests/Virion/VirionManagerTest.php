@@ -1,0 +1,321 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NhanAZ\DevTools\Tests\Virion;
+
+use NhanAZ\DevTools\Support\PhpSourceInspector;
+use NhanAZ\DevTools\Support\YamlReader;
+use NhanAZ\DevTools\Tests\TestCase;
+use NhanAZ\DevTools\Virion\ClassLoaderRegistrar;
+use NhanAZ\DevTools\Virion\PocketMineClassLoaderRegistrar;
+use NhanAZ\DevTools\Virion\VirionClassScanner;
+use NhanAZ\DevTools\Virion\VirionDiscovery;
+use NhanAZ\DevTools\Virion\VirionManager;
+use NhanAZ\DevTools\Virion\VirionManifestReader;
+use NhanAZ\DevTools\Virion\VirionProjectFactory;
+use NhanAZ\DevTools\Virion\VirionProjectSelector;
+use NhanAZ\DevTools\Virion\VirionRegistry;
+use NhanAZ\DevTools\Virion\VirionRequirement;
+use NhanAZ\DevTools\Virion\VirionStatus;
+use Phar;
+use pocketmine\thread\ThreadSafeClassLoader;
+
+final class VirionManagerTest extends TestCase
+{
+    public function test_missing_single_composer_package_reports_failure_for_empty_directory(): void
+    {
+        $registrar = new FakeClassLoaderRegistrar();
+        $registry = new VirionRegistry();
+        $this->manager($registrar, $registry)->discoverAndLoad($this->temporaryDirectory . '/virions', [
+            new VirionRequirement('MissingPackage', '1.0.0', 'plugin/composer.lock', str_repeat('a', 64)),
+        ]);
+        self::assertSame([], $registrar->registrations);
+        self::assertCount(1, $registry->entries());
+        self::assertStringContainsString('MissingPackage is missing', $registry->entries()[0]->message);
+    }
+
+    public function test_single_composer_package_with_changed_source_is_never_registered(): void
+    {
+        $location = $this->copyFixture('SharedVirion', 'virions/Shared');
+        $packageHash = str_repeat('a', 64);
+        file_put_contents($location . '/devtools-provenance.json', json_encode([
+            'composerPackageSha256' => $packageHash,
+            'sourceSha256' => str_repeat('b', 64),
+            'manifestSha256' => hash_file('sha256', $location . '/virion.yml'),
+        ], JSON_THROW_ON_ERROR));
+        $registrar = new FakeClassLoaderRegistrar();
+        $registry = new VirionRegistry();
+        $this->manager($registrar, $registry)->discoverAndLoad($this->temporaryDirectory . '/virions', [
+            new VirionRequirement('SharedVirion', '1.0.0', 'plugin/composer.lock', $packageHash),
+        ]);
+        self::assertSame([], $registrar->registrations);
+        self::assertSame([], $registry->loaded());
+        self::assertStringContainsString('changed after preparation', $registry->entries()[0]->message);
+    }
+
+    public function test_changed_prepared_manifest_is_never_registered(): void
+    {
+        $location = $this->copyFixture('SharedVirion', 'virions/Shared');
+        $packageHash = str_repeat('a', 64);
+        file_put_contents($location . '/devtools-provenance.json', json_encode([
+            'composerPackageSha256' => $packageHash,
+            'sourceSha256' => (new \NhanAZ\DevTools\Virion\VirionSourceFingerprint())->hash($location . '/src'),
+            'manifestSha256' => hash_file('sha256', $location . '/virion.yml'),
+        ], JSON_THROW_ON_ERROR));
+        file_put_contents($location . '/virion.yml', "composer-platform: {php: '*'}\n", FILE_APPEND);
+        $registrar = new FakeClassLoaderRegistrar();
+        $registry = new VirionRegistry();
+        $this->manager($registrar, $registry)->discoverAndLoad($this->temporaryDirectory . '/virions', [new VirionRequirement('SharedVirion', '1.0.0', 'plugin/composer.lock', $packageHash)]);
+
+        self::assertSame([], $registrar->registrations);
+        self::assertSame([], $registry->loaded());
+        self::assertStringContainsString('Prepared manifest', $registry->entries()[0]->message);
+    }
+
+    public function test_transitive_dependency_failure_prevents_shared_graph_registration(): void
+    {
+        $location = $this->copyFixture('SharedVirion', 'virions/Shared');
+        file_put_contents($location . '/virion.yml', "virions: [MissingDependency]\n", FILE_APPEND);
+        $registrar = new FakeClassLoaderRegistrar();
+        $registry = new VirionRegistry();
+        $this->manager($registrar, $registry)->discoverAndLoad($this->temporaryDirectory . '/virions');
+        self::assertSame([], $registrar->registrations);
+        self::assertStringContainsString('MissingDependency is missing', $registry->entries()[0]->message);
+    }
+
+    public function test_one_shared_virion_is_registered_once_and_used_by_two_plugins(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $location = $this->copyFixture('SharedVirion', 'virions/SharedVirion');
+        $classLoader = new ThreadSafeClassLoader();
+        $manager = $this->manager(new PocketMineClassLoaderRegistrar($classLoader), new VirionRegistry());
+
+        $registry = $manager->discoverAndLoad($virions);
+        $manager->load($location);
+
+        self::assertCount(1, $registry->loaded());
+        self::assertTrue($registry->loaded()[0]->asyncSupported);
+        self::assertTrue($classLoader->loadClass('Shared\Virion\Greeting'));
+        require_once __DIR__ . '/../Fixtures/PluginA/UseVirion.php';
+        require_once __DIR__ . '/../Fixtures/PluginB/UseVirion.php';
+        self::assertSame('shared', \Fixture\PluginA\UseVirion::message());
+        self::assertSame('shared', \Fixture\PluginB\UseVirion::message());
+    }
+
+    public function test_duplicate_namespace_is_rejected_as_conflict(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $this->copyFixture('SharedVirion', 'virions/A-Shared');
+        $this->copyFixture('ConflictingVirion', 'virions/B-Conflict');
+        $registrar = new FakeClassLoaderRegistrar();
+        $registry = new VirionRegistry();
+
+        $this->manager($registrar, $registry)->discoverAndLoad($virions);
+
+        self::assertCount(1, $registry->loaded());
+        self::assertCount(1, $registrar->registrations);
+        self::assertSame(VirionStatus::CONFLICT, $registry->entries()[1]->status);
+        self::assertStringContainsString('conflicts', $registry->entries()[1]->message);
+    }
+
+    public function test_invalid_manifest_is_reported(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $this->copyFixture('InvalidVirion', 'virions/Invalid');
+        $registry = new VirionRegistry();
+
+        $this->manager(new FakeClassLoaderRegistrar(), $registry)->discoverAndLoad($virions);
+
+        self::assertSame(VirionStatus::FAILED, $registry->entries()[0]->status);
+        self::assertStringContainsString('antigen', $registry->entries()[0]->message);
+    }
+
+    public function test_duplicate_class_inside_one_virion_is_rejected(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $project = $this->copyFixture('SharedVirion', 'virions/DuplicateClass');
+        $this->filesystem->copyFile(
+            $project . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Shared' . DIRECTORY_SEPARATOR . 'Virion' . DIRECTORY_SEPARATOR . 'Greeting.php',
+            $project . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Shared' . DIRECTORY_SEPARATOR . 'Virion' . DIRECTORY_SEPARATOR . 'Duplicate.php',
+        );
+        $registry = new VirionRegistry();
+
+        $this->manager(new FakeClassLoaderRegistrar(), $registry)->discoverAndLoad($virions);
+
+        self::assertSame(VirionStatus::FAILED, $registry->entries()[0]->status);
+        self::assertStringContainsString('declared more than once', $registry->entries()[0]->message);
+    }
+
+    public function test_class_file_path_and_case_must_match_antigen(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $project = $this->copyFixture('SharedVirion', 'virions/WrongPath');
+        $source = $project . DIRECTORY_SEPARATOR . 'src' . DIRECTORY_SEPARATOR . 'Shared' . DIRECTORY_SEPARATOR . 'Virion' . DIRECTORY_SEPARATOR;
+        $this->filesystem->copyFile($source . 'Greeting.php', $source . 'wrong.php');
+        $this->filesystem->removeTree($source . 'Greeting.php');
+        $registry = new VirionRegistry();
+
+        $this->manager(new FakeClassLoaderRegistrar(), $registry)->discoverAndLoad($virions);
+
+        self::assertSame(VirionStatus::FAILED, $registry->entries()[0]->status);
+        self::assertStringContainsString('expected source file', $registry->entries()[0]->message);
+    }
+
+    public function test_php_compatibility_list_is_preserved_and_enforced(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $project = $this->copyFixture('SharedVirion', 'virions/FuturePhp');
+        file_put_contents(
+            $project . DIRECTORY_SEPARATOR . 'virion.yml',
+            "name: FuturePhp\nversion: 1.0.0\nantigen: Shared\\Virion\nphp:\n  - \"99.0\"\n  - \"100.0\"\n",
+        );
+        $registry = new VirionRegistry();
+
+        $this->manager(new FakeClassLoaderRegistrar(), $registry)->discoverAndLoad($virions);
+
+        self::assertSame(VirionStatus::FAILED, $registry->entries()[0]->status);
+        self::assertSame(['99.0', '100.0'], $registry->entries()[0]->manifest?->php);
+        self::assertStringContainsString('99.0, 100.0', $registry->entries()[0]->message);
+    }
+
+    public function test_class_constant_is_not_mistaken_for_a_declaration(): void
+    {
+        $path = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'Symbols.php';
+        file_put_contents(
+            $path,
+            "<?php\nnamespace Fixture;\n\$name = Existing::class;\nfinal class Actual {}\n",
+        );
+
+        self::assertSame(['Fixture\\Actual'], (new PhpSourceInspector())->inspect($path)->classes);
+    }
+
+    public function test_packaged_phar_virion_is_discovered_and_registered(): void
+    {
+        $source = $this->copyFixture('SharedVirion', 'source/SharedVirion');
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $this->filesystem->ensureDirectory($virions);
+        $path = $virions . DIRECTORY_SEPARATOR . 'SharedVirion.phar';
+        $phar = new Phar($path);
+        $phar->buildFromDirectory($source);
+        $phar->setStub("<?php __HALT_COMPILER();\n");
+        unset($phar);
+        $registrar = new FakeClassLoaderRegistrar();
+        $registry = new VirionRegistry();
+
+        $this->manager($registrar, $registry)->discoverAndLoad($virions);
+
+        self::assertCount(1, $registry->loaded());
+        self::assertCount(1, $registrar->registrations);
+        self::assertStringStartsWith('phar://', str_replace('\\', '/', $registrar->registrations[0][1]));
+    }
+
+    public function test_highest_version_satisfying_all_requirements_is_loaded_once(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $versionOne = $this->copyFixture('SharedVirion', 'virions/SharedVirion-v1');
+        $versionTwo = $this->copyFixture('SharedVirion', 'virions/SharedVirion-v2');
+        file_put_contents(
+            $versionOne . DIRECTORY_SEPARATOR . 'virion.yml',
+            "name: SharedVirion\nversion: 1.8.0\nantigen: Shared\\Virion\napi: 5.0.0\n",
+        );
+        file_put_contents(
+            $versionTwo . DIRECTORY_SEPARATOR . 'virion.yml',
+            "name: SharedVirion\nversion: 2.1.0\nantigen: Shared\\Virion\napi: 5.0.0\n",
+        );
+        $registrar = new FakeClassLoaderRegistrar();
+        $registry = new VirionRegistry();
+
+        $this->manager($registrar, $registry)->discoverAndLoad(
+            $virions,
+            [new VirionRequirement('SharedVirion', '^1.0.0', 'FixturePlugin devtools.yml')],
+        );
+
+        self::assertCount(1, $registry->loaded());
+        self::assertSame('1.8.0', $registry->loaded()[0]->requireManifest()->version);
+        self::assertCount(1, $registrar->registrations);
+        self::assertSame(VirionStatus::SKIPPED, $registry->entries()[1]->status);
+        self::assertStringContainsString('does not satisfy ^1.0.0', $registry->entries()[1]->message);
+    }
+
+    public function test_missing_required_virion_is_visible_in_registry(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $registry = new VirionRegistry();
+
+        $this->manager(new FakeClassLoaderRegistrar(), $registry)->discoverAndLoad(
+            $virions,
+            [new VirionRequirement('MissingVirion', '^1.0.0', 'MissingPlugin devtools.yml')],
+        );
+
+        self::assertSame(VirionStatus::FAILED, $registry->entries()[0]->status);
+        self::assertStringContainsString('Required virion MissingVirion is missing', $registry->entries()[0]->message);
+        self::assertStringContainsString('MissingPlugin devtools.yml', $registry->entries()[0]->message);
+    }
+
+    public function test_highest_version_is_selected_when_no_plugin_constrains_it(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $versionOne = $this->copyFixture('SharedVirion', 'virions/SharedVirion-v1');
+        $versionTwo = $this->copyFixture('SharedVirion', 'virions/SharedVirion-v2');
+        file_put_contents(
+            $versionOne . DIRECTORY_SEPARATOR . 'virion.yml',
+            "name: SharedVirion\nversion: 1.9.0\nantigen: Shared\\Virion\napi: 5.0.0\n",
+        );
+        file_put_contents(
+            $versionTwo . DIRECTORY_SEPARATOR . 'virion.yml',
+            "name: SharedVirion\nversion: 2.0.0\nantigen: Shared\\Virion\napi: 5.0.0\n",
+        );
+        $registry = new VirionRegistry();
+
+        $this->manager(new FakeClassLoaderRegistrar(), $registry)->discoverAndLoad($virions);
+
+        self::assertSame('2.0.0', $registry->loaded()[0]->requireManifest()->version);
+        self::assertSame(VirionStatus::SKIPPED, $registry->entries()[0]->status);
+        self::assertStringContainsString('higher compatible version 2.0.0', $registry->entries()[0]->message);
+    }
+
+    public function test_incompatible_plugin_requirements_load_no_arbitrary_version(): void
+    {
+        $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';
+        $versionOne = $this->copyFixture('SharedVirion', 'virions/SharedVirion-v1');
+        $versionTwo = $this->copyFixture('SharedVirion', 'virions/SharedVirion-v2');
+        file_put_contents(
+            $versionOne . DIRECTORY_SEPARATOR . 'virion.yml',
+            "name: SharedVirion\nversion: 1.9.0\nantigen: Shared\\Virion\napi: 5.0.0\n",
+        );
+        file_put_contents(
+            $versionTwo . DIRECTORY_SEPARATOR . 'virion.yml',
+            "name: SharedVirion\nversion: 2.0.0\nantigen: Shared\\Virion\napi: 5.0.0\n",
+        );
+        $registry = new VirionRegistry();
+
+        $this->manager(new FakeClassLoaderRegistrar(), $registry)->discoverAndLoad(
+            $virions,
+            [
+                new VirionRequirement('SharedVirion', '^1.0.0', 'PluginOne'),
+                new VirionRequirement('SharedVirion', '^2.0.0', 'PluginTwo'),
+            ],
+        );
+
+        self::assertSame([], $registry->loaded());
+        self::assertSame(VirionStatus::CONFLICT, $registry->entries()[0]->status);
+        self::assertSame(VirionStatus::CONFLICT, $registry->entries()[1]->status);
+        self::assertStringContainsString('No version of virion SharedVirion satisfies', $registry->entries()[0]->message);
+    }
+
+    private function manager(ClassLoaderRegistrar $registrar, VirionRegistry $registry): VirionManager
+    {
+        $yaml = new YamlReader();
+
+        return new VirionManager(
+            new VirionDiscovery($this->filesystem),
+            new VirionProjectFactory(new VirionManifestReader($yaml)),
+            new VirionClassScanner(new PhpSourceInspector()),
+            $registrar,
+            $registry,
+            new VirionProjectSelector(),
+            '5.44.0',
+        );
+    }
+}

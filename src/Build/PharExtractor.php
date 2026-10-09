@@ -1,0 +1,145 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NhanAZ\DevTools\Build;
+
+use function dirname;
+use function explode;
+use function file_exists;
+use function file_put_contents;
+use function is_dir;
+use function is_link;
+
+use NhanAZ\DevTools\Support\Filesystem;
+use NhanAZ\DevTools\Support\Path;
+
+use function random_bytes;
+use function realpath;
+use function rename;
+use function str_replace;
+use function strtolower;
+
+final class PharExtractor
+{
+    public function __construct(private readonly Filesystem $filesystem) {}
+
+    public function extract(ArchiveReader $archive, string $destination, bool $overwrite = false): int
+    {
+        if (is_link($destination)) {
+            throw new BuildException("Refusing symbolic-link extraction destination: {$destination}");
+        }
+        if (file_exists($destination) && !is_dir($destination)) {
+            throw new BuildException("Extraction destination is not a directory: {$destination}");
+        }
+        $destinationName = basename($destination);
+        try {
+            $normalizedName = Path::normalizeRelative($destinationName);
+        } catch (\RuntimeException $error) {
+            throw new BuildException("Refusing unsafe extraction destination {$destination}: {$error->getMessage()}", 0, $error);
+        }
+        if ($normalizedName !== $destinationName || str_contains($normalizedName, '/')) {
+            throw new BuildException("Extraction destination must end in one safe directory name: {$destination}");
+        }
+        $parent = dirname($destination);
+        $this->filesystem->ensureDirectory($parent);
+        $realParent = realpath($parent);
+        if ($realParent === false) {
+            throw new BuildException("Cannot resolve extraction destination parent: {$parent}");
+        }
+        $base = Path::join($realParent, $destinationName);
+        if (!Path::isInside($realParent, $base)) {
+            throw new BuildException("Extraction destination escapes its parent: {$destination}");
+        }
+
+        /** @var list<array{ArchiveEntry, string, string}> $pending */
+        $pending = [];
+        $seen = [];
+        foreach ($archive->entries() as $entry) {
+            if ($entry->symbolicLink) {
+                throw new BuildException("Refusing to extract symbolic link: {$entry->path}");
+            }
+            try {
+                $relative = Path::normalizeRelative($entry->path);
+            } catch (\RuntimeException $error) {
+                throw new BuildException("Refusing unsafe archive entry {$entry->path}: {$error->getMessage()}", 0, $error);
+            }
+            $key = strtolower($relative);
+            if (isset($seen[$key])) {
+                throw new BuildException("Archive contains duplicate or case-conflicting path: {$relative}");
+            }
+            foreach ($seen as $seenPath => $_) {
+                if (str_starts_with($key, $seenPath . '/') || str_starts_with($seenPath, $key . '/')) {
+                    throw new BuildException("Archive contains a file and directory prefix conflict: {$relative}");
+                }
+            }
+            $seen[$key] = true;
+            $target = Path::join($base, $relative);
+            if (!Path::isInside($base, $target)) {
+                throw new BuildException("Refusing archive entry outside destination: {$entry->path}");
+            }
+            $this->assertNoSymlinkParent($base, $relative);
+            if (file_exists($target) && !$overwrite) {
+                throw new BuildException("Refusing to overwrite existing extracted file: {$target}");
+            }
+            if (is_dir($target)) {
+                throw new BuildException("Cannot replace an extraction directory with a file: {$target}");
+            }
+            $pending[] = [$entry, $relative, $target];
+        }
+
+        $nonce = bin2hex(random_bytes(8));
+        $stage = Path::join($realParent, '.devtools-extract-' . $nonce);
+        $backup = null;
+        $this->filesystem->ensureDirectory($stage);
+        try {
+            if (is_dir($base)) {
+                $this->filesystem->copyTree($base, $stage);
+            }
+            foreach ($pending as [$entry, $relative]) {
+                $target = Path::join($stage, $relative);
+                $this->filesystem->ensureDirectory(dirname($target));
+                if (file_put_contents($target, $entry->contents) === false) {
+                    throw new BuildException("Cannot write extracted file: {$target}");
+                }
+            }
+            if (is_dir($base)) {
+                $backup = Path::join($realParent, '.devtools-extract-backup-' . $nonce);
+                if (!rename($base, $backup)) {
+                    throw new BuildException("Cannot move the existing extraction destination aside: {$base}");
+                }
+            }
+            if (!rename($stage, $base)) {
+                if ($backup !== null && !rename($backup, $base)) {
+                    throw new BuildException("Cannot install extracted files. The previous destination remains at {$backup}.");
+                }
+                throw new BuildException("Cannot install extracted files at {$base}.");
+            }
+            if ($backup !== null) {
+                $this->filesystem->removeTree($backup);
+            }
+        } finally {
+            if (file_exists($stage) || is_link($stage)) {
+                $this->filesystem->removeTree($stage);
+            }
+        }
+
+        return count($pending);
+    }
+
+    private function assertNoSymlinkParent(string $base, string $relative): void
+    {
+        $components = explode('/', str_replace('\\', '/', $relative));
+        array_pop($components);
+        $current = $base;
+        foreach ($components as $component) {
+            $current = Path::join($current, $component);
+            if (is_link($current)) {
+                throw new BuildException("Refusing extraction through symbolic-link directory: {$current}");
+            }
+            if (file_exists($current) && !is_dir($current)) {
+                throw new BuildException("Cannot create extraction directory because a file exists: {$current}");
+            }
+        }
+    }
+}

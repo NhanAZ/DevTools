@@ -1,0 +1,32 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NhanAZ\DevTools\Tests\Virion;
+
+use NhanAZ\DevTools\Tests\TestCase;
+use NhanAZ\DevTools\Virion\VirionException;
+use NhanAZ\DevTools\Virion\VirionPlatformRequirements;
+
+final class VirionPlatformRequirementsTest extends TestCase
+{
+    public function test_current_php_and_available_extension_satisfy_bounded_composer_constraints(): void
+    {
+        (new VirionPlatformRequirements())->validate(['php' => '^7.4 || >=8.1 <9.0', 'ext-json' => '*'], 'Example');
+        $this->expectNotToPerformAssertions();
+    }
+
+    public function test_future_php_requirement_is_not_relabelled_as_php_81(): void
+    {
+        $this->expectException(VirionException::class);
+        $this->expectExceptionMessage('requires PHP ^99.0');
+        (new VirionPlatformRequirements())->validate(['php' => '^99.0'], 'Example');
+    }
+
+    public function test_unknown_constraint_is_rejected_instead_of_silently_ignored(): void
+    {
+        $this->expectException(VirionException::class);
+        $this->expectExceptionMessage('Unsupported Composer PHP constraint');
+        (new VirionPlatformRequirements())->validate(['php' => '^8.1 || ~8.2'], 'Example');
+    }
+}

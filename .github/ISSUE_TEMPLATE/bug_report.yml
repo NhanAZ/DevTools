@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible DevTools problem
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Please remove secrets and private server data before submitting.
+  - type: input
+    id: devtools-version
+    attributes:
+      label: DevTools version
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Axolotl-PM, PHP and operating system
+      placeholder: Server name and commit, PHP version, operating system
+    validations:
+      required: true
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Relevant sanitized configuration
+      description: Include only relevant plugin.yml, devtools.yml, or virion.yml content.
+      render: yaml
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result and sanitized log
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed tokens, passwords, private addresses, and unrelated server data.
+          required: true

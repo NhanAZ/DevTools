@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: PHP ${{ matrix.php }} full gate
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.2']
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+
+      - name: Check out Axolotl-PM PHP setup helper
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: axolotl-pm/setup-php-action
+          ref: b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e
+          path: .devtools-dependencies/setup-php-action
+          persist-credentials: false
+
+      - name: Set up Axolotl-PM PHP on Node.js 24
+        shell: bash
+        env:
+          INPUT_PHP-VERSION: ${{ matrix.php }}
+          INPUT_PM-VERSION-MAJOR: "5"
+          INPUT_INSTALL-PATH: ./.php-bin
+        run: node "$GITHUB_WORKSPACE/.devtools-dependencies/setup-php-action/dist/index.js"
+
+      - name: Restore Composer download cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cache/composer/files
+            ~/.cache/composer/vcs
+          key: composer-v2-${{ runner.os }}-php-${{ matrix.php }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-v2-${{ runner.os }}-php-${{ matrix.php }}-
+
+      - name: Install locked dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress --no-scripts --no-plugins
+
+      - name: Test artifact handoff and release failure paths
+        run: node --test .github/scripts/*.test.mjs
+
+      - name: Validate workflow contracts
+        if: matrix.php == '8.1'
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.11 -shellcheck= -pyflakes= .github/workflows/*.yml
+
+      - name: Run complete release-equivalent gate
+        run: composer check
+
+      - name: Build documented example through this action
+        if: matrix.php == '8.1'
+        id: example-build
+        uses: ./
+        with:
+          project: examples/HelloShared
+          virions: examples
+          output: build/action-example
+
+      - name: Verify action output
+        if: matrix.php == '8.1'
+        shell: bash
+        env:
+          PHAR_PATH: ${{ steps.example-build.outputs.phar }}
+          BUILD_SHA256: ${{ steps.example-build.outputs.sha256 }}
+          BUILD_METADATA: ${{ steps.example-build.outputs.metadata }}
+        run: |
+          test "$PHAR_PATH" = "$GITHUB_WORKSPACE/build/action-example/HelloShared.phar"
+          test -s "$PHAR_PATH"
+          test "$(sha256sum "$PHAR_PATH" | cut -d ' ' -f 1)" = "$BUILD_SHA256"
+          test -s "$BUILD_METADATA"
+
+      - name: Build documented example with PHPStan level 4
+        if: matrix.php == '8.1'
+        id: example-build-phpstan
+        uses: ./
+        with:
+          project: examples/HelloShared
+          virions: examples
+          output: build/action-example-phpstan
+          phpstan: "4"
+          phpstan-server: |
+            tests/Fixtures/PhpStanServer
+            tests/Fixtures/PhpStanServer
+          phpstan-paths: tests/Fixtures/PhpStanDependency/src
+
+      - name: Verify PHPStan-gated action output
+        if: matrix.php == '8.1'
+        shell: bash
+        env:
+          PHAR_PATH: ${{ steps.example-build-phpstan.outputs.phar }}
+        run: |
+          test "$PHAR_PATH" = "$GITHUB_WORKSPACE/build/action-example-phpstan/HelloShared.phar"
+          test -s "$PHAR_PATH"
+
+      - name: Upload example PHAR from this commit
+        if: matrix.php == '8.1'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: HelloShared-${{ github.sha }}
+          path: ${{ steps.example-build-phpstan.outputs.phar }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload checked PHAR
+        if: matrix.php == '8.1'
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: DevTools-${{ github.sha }}
+          path: build/DevTools.phar
+          if-no-files-found: error
+          retention-days: 14

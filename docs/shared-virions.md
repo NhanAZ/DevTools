@@ -1,0 +1,58 @@
+# Shared development virions
+
+A shared virion is trusted local development code registered once on Axolotl-PM's shared `ThreadSafeClassLoader`. Multiple folder plugins can use its classes without embedding duplicate copies during development. DevTools never downloads virions.
+
+## Package layout
+
+| Path under `virions/ExampleVirion/` | Contents |
+| --- | --- |
+| `virion.yml` | Library manifest |
+| `src/Example/Virion/ClassName.php` | Class below the antigen namespace |
+| `resources/` | Optional resources |
+| `LICENSE` | Library license |
+
+Source folders are preferred. Local `.phar` virions are also accepted. Symlinks are rejected.
+
+```yaml
+name: ExampleVirion
+version: 1.2.3
+antigen: Example\Virion
+api: 5.0.0
+# php: 8.1               optional PHP compatibility
+```
+
+`name`, semantic `version`, `antigen`, and at least one of `api` or `php` are required. Every declared class must remain below the antigen and match its path and letter case.
+
+## Plugin declaration and selection
+
+Declare requirements in the plugin's `devtools.yml`.
+
+```yaml
+virions:
+  - name: ExampleVirion
+    version: ">=1.2.0 <2.0.0"
+```
+
+At startup, DevTools gathers folder-plugin requirements, filters packages incompatible with the current PHP and server API, then loads the highest semantic version satisfying all declarations. Lower or incompatible versions are recorded as skipped. If no version satisfies every plugin, no copy of that virion is loaded and every candidate is recorded as conflicting. Two copies of the selected version are ambiguous and rejected instead of choosing by path order.
+
+The same resolver is used during standalone builds. A missing package or version mismatch fails the build before an artifact is written.
+
+## Debugging
+
+Run `/devtools virions`. Every discovered package is shown as loaded, skipped, failed or conflicting, with its version, location and reason. `/devtools status` reports the loaded count and async-worker class-loader state.
+
+Registration is visible to existing and future async workers because Axolotl-PM shares the loader object. This exposes code only. Plugin objects and mutable main-thread state are not transferred to workers.
+
+## Namespace and class conflicts
+
+DevTools rejects overlapping antigens, duplicate classes, classes outside an antigen, non-autoloadable casing, duplicate selected versions, invalid packages, and incompatible versions before registration. PHP cannot unload a registered class, so change virion code or version and restart the process rather than attempting hot reload.
+
+See the tested [end-to-end example](../examples/README.md).
+
+## Shared source versus private artifacts
+
+Shared source plugins see the same library classes and main-thread static state. Each production PHAR receives its own shaded library classes. An object from plugin A's library is not an instance of plugin B's shaded type, and their static fields are independent even if their original library version matches. Keep bundled-library objects out of cross-plugin public APIs. Use an explicit plugin-level contract with plain values or deliberately external API types. Bundling public or shared namespaces is not supported.
+
+Async registration makes code available, not mutable main-thread static state. The [real Axolotl-PM smoke harness](runtime-validation.md) checks both shared layouts, object and type identity, static state, two private library versions, and worker calls. It is distinct from unit fixtures and does not prove every third-party library is thread-safe.
+
+Virions can declare a `virions` list in their own `virion.yml` with the same name and version syntax. Both build and shared loading resolve these transitive requirements. This bounded resolver selects the highest compatible candidate and rejects conflicts and nonconvergent graphs. It is not a general backtracking package solver. See [dependency support](dependencies.md).

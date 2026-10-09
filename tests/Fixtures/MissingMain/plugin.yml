@@ -1,0 +1,5 @@
+name: MissingMain
+version: 1.0.0
+main: Missing\Main
+api: 5.0.0
+src-namespace-prefix: Missing

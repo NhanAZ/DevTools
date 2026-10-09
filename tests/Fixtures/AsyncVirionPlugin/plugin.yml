@@ -1,0 +1,6 @@
+name: AsyncVirionProbe
+version: 1.0.0
+main: Fixture\AsyncProbe\Main
+api: 5.0.0
+src-namespace-prefix: Fixture\AsyncProbe
+depend: [DevTools]

@@ -1,0 +1,5 @@
+name: FixturePlugin
+version: 1.0.0
+main: Fixture\Plugin\Main
+api: 5.0.0
+src-namespace-prefix: Fixture\Plugin

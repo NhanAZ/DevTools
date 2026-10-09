@@ -1,0 +1,170 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NhanAZ\DevTools\Tests\Build;
+
+use NhanAZ\DevTools\Build\BuildException;
+use NhanAZ\DevTools\Build\PhpStanConfigGenerator;
+use NhanAZ\DevTools\Support\YamlReader;
+use NhanAZ\DevTools\Tests\TestCase;
+use NhanAZ\DevTools\Virion\VirionManifestReader;
+use NhanAZ\DevTools\Virion\VirionProjectFactory;
+use PHPUnit\Framework\Attributes\DataProvider;
+
+final class PhpStanConfigGeneratorTest extends TestCase
+{
+    public function test_configuration_analyzes_only_plugin_source_and_discovers_server_and_declared_virions(): void
+    {
+        $project = $this->copyFixture('BuildPlugin', 'plugin');
+        $server = $this->copyFixture('PhpStanServer', 'server');
+        $virionPath = $this->copyFixture('SharedVirion', 'virions/SharedVirion');
+        $this->filesystem->ensureDirectory($server . DIRECTORY_SEPARATOR . 'generated');
+        $this->filesystem->ensureDirectory($server . DIRECTORY_SEPARATOR . 'vendor');
+        $dependency = $this->copyFixture('PhpStanDependency', 'dependency');
+        $virion = (new VirionProjectFactory(new VirionManifestReader(new YamlReader())))->open($virionPath);
+
+        $config = (new PhpStanConfigGenerator())->generate(
+            $project,
+            $server,
+            [$virion],
+            '4',
+            $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'phpstan-cache',
+            [$dependency . DIRECTORY_SEPARATOR . 'src'],
+        );
+
+        self::assertStringContainsString("    level: 4\n", $config);
+        self::assertStringContainsString($this->portable($project . DIRECTORY_SEPARATOR . 'src'), $config);
+        self::assertStringContainsString($this->portable($server . DIRECTORY_SEPARATOR . 'src'), $config);
+        self::assertStringContainsString($this->portable($server . DIRECTORY_SEPARATOR . 'generated'), $config);
+        self::assertStringContainsString($this->portable($server . DIRECTORY_SEPARATOR . 'vendor'), $config);
+        self::assertStringContainsString($this->portable($virion->sourceRoot), $config);
+        self::assertStringContainsString($this->portable($dependency . DIRECTORY_SEPARATOR . 'src'), $config);
+        self::assertSame(1, substr_count($config, "    paths:\n"));
+    }
+
+    #[DataProvider('validLevelProvider')]
+    public function test_supported_levels_are_accepted(string $level): void
+    {
+        $project = $this->copyFixture('ValidPlugin', 'plugin');
+        $server = $this->copyFixture('PhpStanServer', 'server');
+
+        $config = (new PhpStanConfigGenerator())->generate(
+            $project,
+            $server,
+            [],
+            $level,
+            $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'cache',
+        );
+
+        self::assertStringContainsString("    level: {$level}\n", $config);
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function validLevelProvider(): iterable
+    {
+        yield 'loosest' => ['0'];
+        yield 'recommended start' => ['4'];
+        yield 'strictest number' => ['10'];
+        yield 'maximum alias' => ['max'];
+    }
+
+    #[DataProvider('invalidLevelProvider')]
+    public function test_invalid_or_disabled_level_is_rejected_by_the_generator(string $level): void
+    {
+        $project = $this->copyFixture('ValidPlugin', 'plugin');
+        $server = $this->copyFixture('PhpStanServer', 'server');
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('Invalid PHPStan level');
+
+        (new PhpStanConfigGenerator())->generate(
+            $project,
+            $server,
+            [],
+            $level,
+            $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'cache',
+        );
+    }
+
+    /** @return iterable<string, array{string}> */
+    public static function invalidLevelProvider(): iterable
+    {
+        yield 'disabled belongs to action gate' => ['off'];
+        yield 'negative' => ['-1'];
+        yield 'too high' => ['11'];
+        yield 'leading zero' => ['04'];
+        yield 'empty' => [''];
+    }
+
+    public function test_missing_server_source_has_an_actionable_error(): void
+    {
+        $project = $this->copyFixture('ValidPlugin', 'plugin');
+        $server = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'server';
+        $this->filesystem->ensureDirectory($server);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('server source directory is missing');
+
+        (new PhpStanConfigGenerator())->generate(
+            $project,
+            $server,
+            [],
+            '4',
+            $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'cache',
+        );
+    }
+
+    public function test_missing_additional_scan_directory_has_an_actionable_error(): void
+    {
+        $project = $this->copyFixture('ValidPlugin', 'plugin');
+        $server = $this->copyFixture('PhpStanServer', 'server');
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('additional PHPStan scan directory is missing');
+
+        (new PhpStanConfigGenerator())->generate(
+            $project,
+            $server,
+            [],
+            '4',
+            $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'cache',
+            [$this->temporaryDirectory . DIRECTORY_SEPARATOR . 'missing-dependency'],
+        );
+    }
+
+    public function test_symbolic_link_plugin_source_is_rejected(): void
+    {
+        $project = $this->copyFixture('ValidPlugin', 'plugin');
+        $server = $this->copyFixture('PhpStanServer', 'server');
+        $source = $project . DIRECTORY_SEPARATOR . 'src';
+        $outside = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'outside';
+        rename($source, $outside);
+
+        set_error_handler(static fn(): bool => true);
+        try {
+            $linked = symlink($outside, $source);
+        } finally {
+            restore_error_handler();
+        }
+        if (!$linked) {
+            self::markTestSkipped('Creating directory symlinks is not permitted on this system.');
+        }
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('symbolic-link plugin source');
+
+        (new PhpStanConfigGenerator())->generate(
+            $project,
+            $server,
+            [],
+            '4',
+            $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'cache',
+        );
+    }
+
+    private function portable(string $path): string
+    {
+        return str_replace('\\', '/', $path);
+    }
+}

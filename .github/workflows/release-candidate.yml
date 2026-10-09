@@ -1,0 +1,119 @@
+name: Build DevTools release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate-commit:
+        description: Full source commit SHA matching the selected dispatch branch or tag.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  candidate:
+    name: Validate and upload candidate
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Require the explicitly selected source commit
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.candidate-commit }}
+        shell: bash
+        run: |
+          if [[ ! "$CANDIDATE_COMMIT" =~ ^[a-f0-9]{40}$ ]] || [ "$CANDIDATE_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "candidate-commit must equal the full commit SHA of this dispatch ref. Select the intended branch or tag and retry." >&2
+            exit 2
+          fi
+
+      - name: Check out candidate source
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.candidate-commit }}
+          persist-credentials: false
+
+      - name: Check out Axolotl-PM PHP setup helper
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: axolotl-pm/setup-php-action
+          ref: b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e
+          path: .devtools-dependencies/setup-php-action
+          persist-credentials: false
+
+      - name: Set up Axolotl-PM PHP on Node.js 24
+        shell: bash
+        env:
+          INPUT_PHP-VERSION: "8.1"
+          INPUT_PM-VERSION-MAJOR: "5"
+          INPUT_INSTALL-PATH: ./.php-bin
+        run: node "$GITHUB_WORKSPACE/.devtools-dependencies/setup-php-action/dist/index.js"
+
+      - name: Restore Composer download cache
+        uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cache/composer/files
+            ~/.cache/composer/vcs
+          key: composer-v2-${{ runner.os }}-php-8.1-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-v2-${{ runner.os }}-php-8.1-
+
+      - name: Install locked dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress --no-scripts --no-plugins
+
+      - name: Verify synchronized candidate version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          VERSION="$(node -p 'JSON.parse(require("fs").readFileSync("composer.json", "utf8")).extra.devtools["release-version"]')"
+          php bin/verify-version.php "$VERSION"
+          printf 'version=%s\n' "$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Test release provenance and failure paths
+        run: node --test .github/scripts/*.test.mjs
+
+      - name: Run complete release gate
+        run: composer check
+
+      - name: Prepare and inspect release assets
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git diff --exit-code
+          git diff --cached --exit-code
+          mkdir -p dist
+          cp build/DevTools.phar "dist/DevTools-${VERSION}.phar"
+          php bin/validate-artifact.php "dist/DevTools-${VERSION}.phar" "${VERSION}"
+          (cd examples && zip -X -r "../dist/DevTools-examples-${VERSION}.zip" .)
+          unzip -Z1 "dist/DevTools-examples-${VERSION}.zip" | grep -Fx 'HelloShared/plugin.yml'
+          unzip -Z1 "dist/DevTools-examples-${VERSION}.zip" | grep -Fx 'SharedGreeting/virion.yml'
+          unzip -Z1 "dist/DevTools-examples-${VERSION}.zip" | grep -Fx '.github/workflows/build.yml'
+          unzip -Z1 "dist/DevTools-examples-${VERSION}.zip" | grep -Fx 'agent/AGENTS.md'
+          cp RELEASE_NOTES.md dist/RELEASE_NOTES.md
+          node .github/scripts/release-candidate.mjs create dist "$VERSION"
+
+      - name: Upload release-candidate assets
+        id: upload
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: DevTools-candidate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Record candidate identity for review
+        env:
+          CANDIDATE_ID: ${{ steps.upload.outputs.artifact-id }}
+          CANDIDATE_URL: ${{ steps.upload.outputs.artifact-url }}
+          CANDIDATE_SHA256: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          printf '| Candidate | Value |\n| --- | --- |\n| Commit | `%s` |\n| Run | `%s` |\n| Attempt | `%s` |\n| Artifact ID | `%s` |\n| Archive digest | `%s` |\n\n[Download candidate](%s)\n' \
+            "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$CANDIDATE_ID" "$CANDIDATE_SHA256" "$CANDIDATE_URL" >> "$GITHUB_STEP_SUMMARY"

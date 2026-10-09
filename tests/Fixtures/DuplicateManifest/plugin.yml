@@ -1,0 +1,15 @@
+name: DuplicateManifest
+version: 1.0.0
+main: Duplicate\Main
+api: 5.0.0
+src-namespace-prefix: Duplicate
+commands:
+  hello:
+    description: First
+  hello:
+    description: Second
+permissions:
+  duplicate.use:
+    default: op
+  duplicate.use:
+    default: true

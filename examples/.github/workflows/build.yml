@@ -1,0 +1,54 @@
+name: Build PHAR
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build downloadable PHAR
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out plugin source
+        uses: actions/checkout@v7.0.1
+
+      - name: Check out Axolotl-PM PHP setup helper
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: axolotl-pm/setup-php-action
+          ref: b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e
+          path: .devtools-dependencies/setup-php-action
+          persist-credentials: false
+
+      - name: Set up Axolotl-PM PHP on Node.js 24
+        shell: bash
+        env:
+          INPUT_PHP-VERSION: "8.1"
+          INPUT_PM-VERSION-MAJOR: "5"
+          INPUT_INSTALL-PATH: ./.php-bin
+        run: node "$GITHUB_WORKSPACE/.devtools-dependencies/setup-php-action/dist/index.js"
+
+      - name: Build standalone plugin PHAR
+        id: build
+        uses: NhanAZ/DevTools@v1.0.0
+        with:
+          project: HelloShared
+          virions: .
+          output: build
+
+      - name: Upload PHAR from this commit
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ steps.build.outputs.plugin-name }}-${{ github.sha }}
+          path: ${{ steps.build.outputs.phar }}
+          if-no-files-found: error
+          retention-days: 14

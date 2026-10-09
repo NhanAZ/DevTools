@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DevTools CLI response v1",
+  "type": "object",
+  "required": ["schema_version", "success", "command", "tool", "data", "diagnostics", "checks"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "success": {"type": "boolean"},
+    "command": {"type": "string"},
+    "tool": {
+      "type": "object", "required": ["name", "version"],
+      "properties": {"name": {"const": "DevTools"}, "version": {"type": ["string", "null"]}}
+    },
+    "data": {"type": "object"},
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object", "required": ["code", "severity", "message", "file", "line", "suggestion"],
+        "properties": {
+          "code": {"type": "string"}, "severity": {"enum": ["error", "warning", "notice"]},
+          "message": {"type": "string"}, "file": {"type": ["string", "null"]},
+          "line": {"type": ["integer", "null"]}, "suggestion": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "checks": {
+      "type": "object", "required": ["structure", "dependencies", "artifact", "static_analysis", "runtime"],
+      "additionalProperties": {"enum": ["passed", "failed", "not_run"]}
+    }
+  }
+}

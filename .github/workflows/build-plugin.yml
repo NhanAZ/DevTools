@@ -1,0 +1,195 @@
+name: Build plugin PHAR
+
+on:
+  workflow_call:
+    inputs:
+      devtools-ref:
+        description: Required full DevTools commit SHA. Pin the reusable workflow to the same SHA.
+        required: true
+        type: string
+      prepare-dependencies:
+        description: Explicitly install locked Composer runtime dependencies and prepare supported virions.
+        required: false
+        default: false
+        type: boolean
+      php-version:
+        description: PHP version supplied by axolotl-pm/setup-php-action.
+        required: false
+        default: '8.1'
+        type: string
+      pm-version-major:
+        description: Axolotl-PM server major version supplied by the PHP setup helper.
+        required: false
+        default: '5'
+        type: string
+      project:
+        description: Plugin project path relative to the checked-out repository.
+        required: false
+        default: .
+        type: string
+      virions:
+        description: Local virion directory relative to the checked-out repository.
+        required: false
+        default: virions
+        type: string
+      output:
+        description: Build output directory relative to the checked-out repository.
+        required: false
+        default: build
+        type: string
+      overwrite:
+        description: Replace an existing PHAR in the output directory.
+        required: false
+        default: false
+        type: boolean
+      phpstan:
+        description: PHPStan level 0 through 10 or max. Use off to keep analysis disabled.
+        required: false
+        default: 'off'
+        type: string
+      phpstan-server:
+        description: Newline-separated local server source checkouts for independent PHPStan analysis.
+        required: false
+        default: ''
+        type: string
+      phpstan-paths:
+        description: Newline-separated local source directories for plugin or library symbols.
+        required: false
+        default: ''
+        type: string
+      artifact-name:
+        description: Uploaded artifact name. Defaults to <plugin-name>-<commit-sha>.
+        required: false
+        default: ''
+        type: string
+      retention-days:
+        description: Number of days to retain the uploaded artifact.
+        required: false
+        default: 14
+        type: number
+    outputs:
+      sha256:
+        description: SHA-256 of the built PHAR.
+        value: ${{ jobs.build.outputs.sha256 }}
+      plugin-name:
+        description: Plugin name read from plugin.yml.
+        value: ${{ jobs.build.outputs.plugin-name }}
+      plugin-version:
+        description: Plugin version read from plugin.yml.
+        value: ${{ jobs.build.outputs.plugin-version }}
+      artifact-name:
+        description: Name of the uploaded PHAR artifact.
+        value: ${{ jobs.build.outputs.artifact-name }}
+      artifact-id:
+        description: Immutable ID of the uploaded PHAR artifact.
+        value: ${{ jobs.build.outputs.artifact-id }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build downloadable PHAR
+    runs-on: ubuntu-24.04
+    outputs:
+      plugin-name: ${{ steps.devtools.outputs.plugin-name }}
+      plugin-version: ${{ steps.devtools.outputs.plugin-version }}
+      artifact-name: ${{ steps.metadata.outputs.artifact-name }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      sha256: ${{ steps.devtools.outputs.sha256 }}
+    steps:
+      - name: Require an immutable builder revision
+        shell: bash
+        env:
+          DEVTOOLS_REF: ${{ inputs.devtools-ref }}
+        run: |
+          if [[ ! "$DEVTOOLS_REF" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "devtools-ref must be a full lowercase commit SHA. Use the same SHA in the reusable workflow reference. Branches and tags are not accepted." >&2
+            exit 2
+          fi
+
+      - name: Check out plugin source
+        uses: actions/checkout@v7.0.1
+
+      - name: Check out Axolotl-PM PHP setup helper
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: axolotl-pm/setup-php-action
+          ref: b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e
+          path: .devtools-dependencies/setup-php-action
+          persist-credentials: false
+
+      - name: Set up Axolotl-PM PHP on Node.js 24
+        shell: bash
+        env:
+          INPUT_PHP-VERSION: ${{ inputs.php-version }}
+          INPUT_PM-VERSION-MAJOR: ${{ inputs.pm-version-major }}
+          INPUT_INSTALL-PATH: ./.php-bin
+        run: node "$GITHUB_WORKSPACE/.devtools-dependencies/setup-php-action/dist/index.js"
+
+      - name: Check out the selected DevTools revision
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: NhanAZ/DevTools
+          ref: ${{ inputs.devtools-ref }}
+          path: .devtools-dependencies/tool
+          persist-credentials: false
+
+      - name: Verify checked-out builder identity and CLI contract
+        shell: bash
+        env:
+          DEVTOOLS_REF: ${{ inputs.devtools-ref }}
+        run: |
+          set -euo pipefail
+          test "$(git -C .devtools-dependencies/tool rev-parse HEAD)" = "$DEVTOOLS_REF"
+          if [ ! -f .devtools-dependencies/tool/bin/devtools.php ] || [ ! -f .devtools-dependencies/tool/.github/scripts/artifact-contract.mjs ]; then
+            echo "Selected DevTools commit does not provide the required CLI metadata contract. Pin the same commit as this workflow revision." >&2
+            exit 1
+          fi
+
+      - name: Build standalone plugin PHAR
+        id: devtools
+        uses: ./.devtools-dependencies/tool
+        with:
+          prepare-dependencies: ${{ inputs.prepare-dependencies }}
+          project: ${{ inputs.project }}
+          virions: ${{ inputs.virions }}
+          output: ${{ inputs.output }}
+          overwrite: ${{ inputs.overwrite }}
+          phpstan: ${{ inputs.phpstan }}
+          phpstan-server: ${{ inputs.phpstan-server }}
+          phpstan-paths: ${{ inputs.phpstan-paths }}
+
+      - name: Read artifact metadata
+        id: metadata
+        shell: bash
+        env:
+          INPUT_ARTIFACT_NAME: ${{ inputs.artifact-name }}
+          INPUT_PLUGIN_NAME: ${{ steps.devtools.outputs.plugin-name }}
+          BUILD_METADATA: ${{ steps.devtools.outputs.metadata }}
+          BUILD_PHAR: ${{ steps.devtools.outputs.phar }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/devtools-artifact"
+          cp "$BUILD_METADATA" "$RUNNER_TEMP/devtools-artifact/build-metadata.json"
+          cp "$BUILD_PHAR" "$RUNNER_TEMP/devtools-artifact/"
+          if [ -n "$INPUT_ARTIFACT_NAME" ]; then
+            ARTIFACT_NAME="$INPUT_ARTIFACT_NAME"
+          else
+            ARTIFACT_NAME="${INPUT_PLUGIN_NAME}-${GITHUB_SHA}"
+          fi
+
+          if [[ "$ARTIFACT_NAME" == *$'\n'* || "$ARTIFACT_NAME" == *$'\r'* ]]; then
+            echo "artifact-name must be a single-line value." >&2
+            exit 2
+          fi
+          printf 'artifact-name=%s\n' "$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload PHAR artifact
+        id: upload
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: ${{ steps.metadata.outputs.artifact-name }}
+          path: ${{ runner.temp }}/devtools-artifact/
+          if-no-files-found: error
+          retention-days: ${{ inputs.retention-days }}

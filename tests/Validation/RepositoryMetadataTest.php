@@ -1,0 +1,199 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NhanAZ\DevTools\Tests\Validation;
+
+use PHPUnit\Framework\TestCase;
+
+final class RepositoryMetadataTest extends TestCase
+{
+    private const VERSION = '1.0.0';
+    private const PHP_ACTION_COMMIT = 'b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e';
+
+    public function test_release_version_is_synchronized(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $composerContents = file_get_contents($root . DIRECTORY_SEPARATOR . 'composer.json');
+        self::assertIsString($composerContents);
+        $composer = json_decode($composerContents, true, 512, JSON_THROW_ON_ERROR);
+        $plugin = yaml_parse_file($root . DIRECTORY_SEPARATOR . 'plugin.yml');
+        $changelog = file_get_contents($root . DIRECTORY_SEPARATOR . 'CHANGELOG.md');
+        $releaseNotes = file_get_contents($root . DIRECTORY_SEPARATOR . 'RELEASE_NOTES.md');
+
+        self::assertIsArray($composer);
+        self::assertIsArray($plugin);
+        $extra = $composer['extra'] ?? null;
+        self::assertIsArray($extra);
+        $devtools = $extra['devtools'] ?? null;
+        self::assertIsArray($devtools);
+        self::assertSame(self::VERSION, $devtools['release-version'] ?? null);
+        self::assertSame(self::VERSION, $plugin['version'] ?? null);
+        $requireDev = $composer['require-dev'] ?? null;
+        self::assertIsArray($requireDev);
+        self::assertSame('dev-stable', $requireDev['axolotl-pm/pocketmine-mp'] ?? null);
+        self::assertArrayNotHasKey('pocketmine/pocketmine-mp', $requireDev);
+        self::assertIsString($changelog);
+        self::assertStringContainsString('## ' . self::VERSION . ' -', $changelog);
+        self::assertIsString($releaseNotes);
+        self::assertStringContainsString('# DevTools ' . self::VERSION, $releaseNotes);
+    }
+
+    public function test_workflows_are_valid_and_do_not_bypass_required_gates(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $ciPath = $root . DIRECTORY_SEPARATOR . '.github' . DIRECTORY_SEPARATOR . 'workflows' . DIRECTORY_SEPARATOR . 'ci.yml';
+        $releasePath = $root . DIRECTORY_SEPARATOR . '.github' . DIRECTORY_SEPARATOR . 'workflows' . DIRECTORY_SEPARATOR . 'release.yml';
+        $reusablePath = $root . DIRECTORY_SEPARATOR . '.github' . DIRECTORY_SEPARATOR . 'workflows' . DIRECTORY_SEPARATOR . 'build-plugin.yml';
+        $candidatePath = $root . DIRECTORY_SEPARATOR . '.github' . DIRECTORY_SEPARATOR . 'workflows' . DIRECTORY_SEPARATOR . 'release-candidate.yml';
+        $ci = file_get_contents($ciPath);
+        $release = file_get_contents($releasePath);
+        $reusable = file_get_contents($reusablePath);
+        $candidate = file_get_contents($candidatePath);
+
+        self::assertIsArray(yaml_parse_file($ciPath));
+        self::assertIsArray(yaml_parse_file($releasePath));
+        self::assertIsArray(yaml_parse_file($reusablePath));
+        self::assertIsArray(yaml_parse_file($candidatePath));
+        self::assertIsString($candidate);
+        self::assertIsString($ci);
+        self::assertIsString($release);
+        self::assertIsString($reusable);
+        self::assertStringContainsString('pull_request:', $ci);
+        self::assertStringContainsString('branches: [main]', $ci);
+        self::assertStringContainsString("php: ['8.1', '8.2']", $ci);
+        self::assertStringContainsString('run: composer check', $ci);
+        self::assertStringContainsString('contents: read', $ci);
+        self::assertStringContainsString('workflow_dispatch:', $release);
+        self::assertStringContainsString('candidate-run-id:', $release);
+        self::assertStringContainsString('artifact-id:', $release);
+        self::assertStringContainsString('candidate-commit:', $candidate);
+        self::assertStringContainsString('ref: ${{ inputs.candidate-commit }}', $candidate);
+        self::assertStringContainsString('contents: write', $release);
+        self::assertStringContainsString('run: composer check', $candidate);
+        self::assertStringContainsString('bin/validate-artifact.php', $candidate);
+        self::assertStringNotContainsString('composer ', $release);
+        self::assertStringNotContainsString('devtools.php', $release);
+        self::assertStringContainsString('release-candidate.mjs verify', $release);
+        self::assertStringContainsString('release-candidate.mjs download', $release);
+        self::assertStringContainsString('--verify-tag', $release);
+        self::assertStringContainsString('gh release create', $release);
+        self::assertStringContainsString('workflow_call:', $reusable);
+        self::assertStringContainsString('uses: ./.devtools-dependencies/tool', $reusable);
+        self::assertStringContainsString('ref: ${{ inputs.devtools-ref }}', $reusable);
+        self::assertStringContainsString('uses: actions/upload-artifact@v7.0.1', $reusable);
+        self::assertStringContainsString('artifact-id: ${{ steps.upload.outputs.artifact-id }}', $reusable);
+        self::assertStringContainsString('contents: read', $reusable);
+        self::assertStringContainsString('devtools-ref must be a full lowercase commit SHA', $reusable);
+        self::assertStringNotContainsString('default: main', $reusable);
+
+        foreach ([$ci, $candidate, $reusable] as $workflow) {
+            self::assertStringContainsString('repository: axolotl-pm/setup-php-action', $workflow);
+            self::assertStringContainsString('ref: ' . self::PHP_ACTION_COMMIT, $workflow);
+            self::assertStringContainsString('setup-php-action/dist/index.js', $workflow);
+            self::assertStringContainsString('Set up Axolotl-PM PHP on Node.js 24', $workflow);
+            self::assertStringNotContainsString('pmmp/setup-php-action', $workflow);
+        }
+
+        foreach ([$ci, $candidate, $release] as $workflow) {
+            self::assertStringNotContainsString('continue-on-error', $workflow);
+            self::assertStringNotContainsString('|| true', $workflow);
+            self::assertStringNotContainsString('pull_request_target', $workflow);
+        }
+    }
+
+    public function test_composite_action_and_per_commit_example_are_valid(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $actionPath = $root . DIRECTORY_SEPARATOR . 'action.yml';
+        $examplePath = $root . DIRECTORY_SEPARATOR . 'examples' . DIRECTORY_SEPARATOR . '.github'
+            . DIRECTORY_SEPARATOR . 'workflows' . DIRECTORY_SEPARATOR . 'build.yml';
+        $ciPath = $root . DIRECTORY_SEPARATOR . '.github' . DIRECTORY_SEPARATOR . 'workflows'
+            . DIRECTORY_SEPARATOR . 'ci.yml';
+        $releasePath = $root . DIRECTORY_SEPARATOR . '.github' . DIRECTORY_SEPARATOR . 'workflows'
+            . DIRECTORY_SEPARATOR . 'release-candidate.yml';
+        $action = yaml_parse_file($actionPath);
+        $example = yaml_parse_file($examplePath);
+        $actionContents = file_get_contents($actionPath);
+        $exampleContents = file_get_contents($examplePath);
+        $ciContents = file_get_contents($ciPath);
+        $releaseContents = file_get_contents($releasePath);
+        $agentGuide = file_get_contents($root . DIRECTORY_SEPARATOR . 'docs' . DIRECTORY_SEPARATOR . 'ai-agent.md');
+        $agentTemplate = file_get_contents($root . DIRECTORY_SEPARATOR . 'examples' . DIRECTORY_SEPARATOR . 'agent'
+            . DIRECTORY_SEPARATOR . 'AGENTS.md');
+
+        self::assertIsArray($action);
+        self::assertIsArray($example);
+        $runs = $action['runs'] ?? null;
+        $inputs = $action['inputs'] ?? null;
+        $outputs = $action['outputs'] ?? null;
+        self::assertIsArray($runs);
+        self::assertIsArray($inputs);
+        self::assertIsArray($outputs);
+        $phpStanInput = $inputs['phpstan'] ?? null;
+        $phpStanServerInput = $inputs['phpstan-server'] ?? null;
+        $phpStanPathsInput = $inputs['phpstan-paths'] ?? null;
+        self::assertIsArray($phpStanInput);
+        self::assertIsArray($phpStanServerInput);
+        self::assertIsArray($phpStanPathsInput);
+        self::assertSame('off', $phpStanInput['default'] ?? null);
+        self::assertSame('', $phpStanServerInput['default'] ?? null);
+        self::assertSame('', $phpStanPathsInput['default'] ?? null);
+        $pharOutput = $outputs['phar'] ?? null;
+        $pluginNameOutput = $outputs['plugin-name'] ?? null;
+        self::assertIsArray($pharOutput);
+        self::assertIsArray($pluginNameOutput);
+        self::assertSame('composite', $runs['using'] ?? null);
+        self::assertSame('${{ steps.build.outputs.phar }}', $pharOutput['value'] ?? null);
+        self::assertSame('${{ steps.build.outputs.plugin-name }}', $pluginNameOutput['value'] ?? null);
+        self::assertIsString($actionContents);
+        self::assertStringContainsString('bin/devtools.php" build --json', $actionContents);
+        self::assertArrayHasKey('sha256', $outputs);
+        self::assertArrayHasKey('metadata', $outputs);
+        self::assertArrayHasKey('plugin-version', $outputs);
+        self::assertStringContainsString('php -d phar.readonly=0', $actionContents);
+        self::assertStringContainsString('INPUT_PROJECT: ${{ inputs.project }}', $actionContents);
+        self::assertStringContainsString('Input overwrite must be true or false', $actionContents);
+        self::assertStringContainsString('case "$INPUT_PHPSTAN" in', $actionContents);
+        self::assertStringContainsString("off)\n", $actionContents);
+        self::assertStringContainsString('phpstan-server is required when PHPStan is enabled', $actionContents);
+        self::assertStringContainsString('SERVER_PATHS=()', $actionContents);
+        self::assertStringContainsString('for SERVER_PATH in "${SERVER_PATHS[@]}"', $actionContents);
+        self::assertStringContainsString('devtools-phpstan-$server_index.neon', $actionContents);
+        self::assertStringContainsString('devtools-phpstan-cache-$server_index', $actionContents);
+        self::assertStringContainsString('PHPSTAN_SCAN_ARGS', $actionContents);
+        self::assertStringContainsString('bin/devtools-phpstan-config.php', $actionContents);
+        self::assertStringContainsString('vendor/phpstan/phpstan/phpstan', $actionContents);
+        self::assertStringNotContainsString('vendor/bin/phpstan', $actionContents);
+        self::assertStringContainsString('--no-scripts', $actionContents);
+        self::assertStringContainsString('--no-plugins', $actionContents);
+        self::assertIsString($exampleContents);
+        self::assertStringContainsString("on:\n  push:\n  pull_request:\n  workflow_dispatch:", $exampleContents);
+        self::assertStringContainsString('uses: NhanAZ/DevTools@v' . self::VERSION, $exampleContents);
+        self::assertStringContainsString('uses: actions/upload-artifact@v7.0.1', $exampleContents);
+        self::assertStringContainsString('path: ${{ steps.build.outputs.phar }}', $exampleContents);
+        self::assertStringContainsString('repository: axolotl-pm/setup-php-action', $exampleContents);
+        self::assertStringContainsString('ref: ' . self::PHP_ACTION_COMMIT, $exampleContents);
+        self::assertStringContainsString('Set up Axolotl-PM PHP on Node.js 24', $exampleContents);
+        self::assertStringContainsString('setup-php-action/dist/index.js', $exampleContents);
+        self::assertStringNotContainsString('pmmp/setup-php-action', $exampleContents);
+        self::assertStringNotContainsString('phpstan:', $exampleContents);
+        self::assertIsString($ciContents);
+        self::assertStringContainsString('uses: ./', $ciContents);
+        self::assertStringContainsString('name: HelloShared-${{ github.sha }}', $ciContents);
+        self::assertStringContainsString('phpstan: "4"', $ciContents);
+        self::assertStringContainsString("phpstan-server: |\n            tests/Fixtures/PhpStanServer\n            tests/Fixtures/PhpStanServer", $ciContents);
+        self::assertStringContainsString('phpstan-paths: tests/Fixtures/PhpStanDependency/src', $ciContents);
+        self::assertIsString($releaseContents);
+        self::assertStringContainsString("grep -Fx '.github/workflows/build.yml'", $releaseContents);
+        self::assertStringContainsString("grep -Fx 'agent/AGENTS.md'", $releaseContents);
+        self::assertIsString($agentGuide);
+        self::assertStringContainsString('(cli.md)', $agentGuide);
+        self::assertStringContainsString('(dependencies.md)', $agentGuide);
+        self::assertStringContainsString('(github-actions.md)', $agentGuide);
+        self::assertIsString($agentTemplate);
+        self::assertStringContainsString('build-plugin.yml@v' . self::VERSION, $agentTemplate);
+        self::assertStringContainsString('Do not guess virion repositories', $agentTemplate);
+        self::assertStringContainsString('Upload exactly one artifact', $agentTemplate);
+    }
+}

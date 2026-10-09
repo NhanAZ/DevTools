@@ -1,0 +1,243 @@
+<?php
+
+declare(strict_types=1);
+
+namespace NhanAZ\DevTools\Tests\Build;
+
+use NhanAZ\DevTools\Build\BuildException;
+use NhanAZ\DevTools\Build\ComposerVirionPreparer;
+use NhanAZ\DevTools\Tests\TestCase;
+use Phar;
+
+final class ComposerVirionPreparerTest extends TestCase
+{
+    public function test_locked_transitive_packages_build_without_redeclaring_dependencies(): void
+    {
+        $project = $this->project();
+        $destination = $this->temporaryDirectory . '/prepared';
+        $metadata = (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+        self::assertCount(2, $metadata);
+        self::assertFileExists($destination . '/example.a/LICENSE');
+        self::assertFileDoesNotExist($destination . '/example.dev/virion.yml');
+        $result = $this->builder()->build($project, $destination, $project . '/build');
+        self::assertCount(2, $result->shadedVirions);
+        self::assertCount(2, $result->dependencies);
+        $phar = new Phar($result->outputPath);
+        $a = $result->shadedVirions['Example\\LibraryA'];
+        $b = $result->shadedVirions['Example\\LibraryB'];
+        $relativeA = 'src/' . str_replace('Fixture/Build/', '', str_replace('\\', '/', $a)) . '/Greeting.php';
+        $relativeB = 'src/' . str_replace('Fixture/Build/', '', str_replace('\\', '/', $b)) . '/Greeting.php';
+        self::assertTrue(isset($phar['META-INF/virions/example.a/devtools-provenance.json']));
+        self::assertStringContainsString($b, $phar[$relativeA]->getContent());
+        require_once 'phar://' . str_replace('\\', '/', $result->outputPath) . '/' . $relativeB;
+        require_once 'phar://' . str_replace('\\', '/', $result->outputPath) . '/' . $relativeA;
+        self::assertSame('composed resource', ($a . '\\Greeting')::message());
+    }
+
+    public function test_prepare_failure_preserves_existing_directory_and_cleans_staging(): void
+    {
+        $project = $this->project();
+        $destination = $this->temporaryDirectory . '/prepared';
+        $preparer = new ComposerVirionPreparer($this->filesystem);
+        $preparer->prepare($project, $destination);
+        $before = hash_file('sha256', $destination . '/example.a/virion.yml');
+        try {
+            $preparer->prepare($project, $destination);
+            self::fail('Expected output protection.');
+        } catch (BuildException $error) {
+            self::assertStringContainsString('Refusing to replace', $error->getMessage());
+        }
+        self::assertSame($before, hash_file('sha256', $destination . '/example.a/virion.yml'));
+        self::assertSame([], glob($this->temporaryDirectory . '/.devtools-prepare-*'));
+    }
+
+    public function test_symlink_output_ancestor_is_rejected_before_creating_directories(): void
+    {
+        $project = $this->project();
+        $outside = $this->temporaryDirectory . '/outside';
+        $linked = $this->temporaryDirectory . '/linked';
+        $this->filesystem->ensureDirectory($outside);
+        set_error_handler(static fn(): bool => true);
+        try {
+            $created = symlink($outside, $linked);
+        } finally {
+            restore_error_handler();
+        }
+        if (!$created) {
+            self::markTestSkipped('Creating directory symlinks is not permitted on this system.');
+        }
+        try {
+            (new ComposerVirionPreparer($this->filesystem))->prepare($project, $linked . '/new-directory/prepared');
+            self::fail('Expected symbolic-link destination rejection.');
+        } catch (BuildException $error) {
+            self::assertStringContainsString('through symbolic link', $error->getMessage());
+        }
+        self::assertDirectoryDoesNotExist($outside . '/new-directory');
+    }
+
+    public function test_changed_installed_metadata_is_rejected_without_output(): void
+    {
+        $project = $this->project();
+        file_put_contents($project . '/vendor/example/a/composer.json', '{}');
+        try {
+            (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+            self::fail('Expected changed installed metadata failure.');
+        } catch (BuildException $error) {
+            self::assertStringContainsString('differs from composer.lock', $error->getMessage());
+        }
+        self::assertDirectoryDoesNotExist($this->temporaryDirectory . '/prepared');
+        self::assertSame([], glob($this->temporaryDirectory . '/.devtools-prepare-*'));
+    }
+
+    public function test_stale_lock_is_rejected_even_with_include_paths(): void
+    {
+        $project = $this->project();
+        file_put_contents($project . '/composer.json', '{"require":{"example/a":"^2.0"}}');
+        file_put_contents($project . '/devtools.yml', "include-paths: [LICENSE]\n");
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('composer.lock is stale');
+        $this->builder()->build($project, $this->temporaryDirectory . '/prepared', $project . '/build');
+    }
+
+    public function test_changed_lock_revision_requires_new_preparation(): void
+    {
+        $project = $this->project();
+        $destination = $this->temporaryDirectory . '/prepared';
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+        $contents = file_get_contents($project . '/composer.lock');
+        self::assertIsString($contents);
+        file_put_contents($project . '/composer.lock', str_replace(str_repeat('a', 40), str_repeat('b', 40), $contents));
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('does not match this composer.lock');
+        $this->builder()->build($project, $destination, $project . '/build');
+    }
+
+    public function test_unsupported_autoload_is_rejected(): void
+    {
+        $project = $this->project(['files' => ['bootstrap.php']]);
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('files, classmap and multiple roots');
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+    }
+
+    public function test_prepared_source_changes_are_rejected(): void
+    {
+        $project = $this->project();
+        $destination = $this->temporaryDirectory . '/prepared';
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+        file_put_contents($destination . '/example.b/src/message.txt', 'changed source');
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('changed after preparation');
+        $this->builder()->build($project, $destination, $project . '/build');
+    }
+
+    public function test_prepared_manifest_changes_are_rejected(): void
+    {
+        $project = $this->project();
+        $destination = $this->temporaryDirectory . '/prepared';
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+        file_put_contents($destination . '/example.a/virion.yml', "comment: changed\n", FILE_APPEND);
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('Prepared manifest');
+        $this->builder()->build($project, $destination, $project . '/build');
+    }
+
+    public function test_repeated_local_declaration_preserves_composer_provenance_requirement(): void
+    {
+        $project = $this->project();
+        $destination = $this->temporaryDirectory . '/prepared';
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+        file_put_contents($project . '/devtools.yml', "virions:\n  - name: example.a\n    version: '1.0.0'\n");
+        unlink($destination . '/example.a/devtools-provenance.json');
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('does not match this composer.lock');
+        $this->builder()->build($project, $destination, $project . '/build');
+    }
+
+    public function test_unrelated_lock_metadata_does_not_prevent_sharing_identical_package(): void
+    {
+        $project = $this->project();
+        $destination = $this->temporaryDirectory . '/prepared';
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+        $contents = file_get_contents($project . '/composer.lock');
+        self::assertIsString($contents);
+        file_put_contents($project . '/composer.lock', str_replace('"packages-dev":', '"_readme": ["another project lock"], "packages-dev":', $contents));
+        $result = $this->builder()->build($project, $destination, $project . '/build');
+        self::assertCount(2, $result->dependencies);
+    }
+
+    public function test_root_composer_files_bootstrap_is_rejected(): void
+    {
+        $project = $this->copyFixture('BuildPlugin');
+        file_put_contents($project . '/composer.json', '{"autoload":{"files":["src/functions.php"]}}');
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('autoload.files');
+        $this->builder()->build($project, $this->temporaryDirectory . '/virions', $project . '/build');
+    }
+
+    public function test_root_composer_source_outside_plugin_src_is_rejected(): void
+    {
+        $project = $this->copyFixture('BuildPlugin');
+        file_put_contents($project . '/composer.json', '{"autoload":{"psr-4":{"Extra\\\\Library\\\\":"lib/"}}}');
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('autoload path lib/ is outside src/');
+        $this->builder()->build($project, $this->temporaryDirectory . '/virions', $project . '/build');
+    }
+
+    public function test_simple_project_prepare_is_noop(): void
+    {
+        $project = $this->copyFixture('BuildPlugin');
+        $destination = $this->temporaryDirectory . '/prepared';
+        self::assertSame([], (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination));
+        self::assertDirectoryDoesNotExist($destination);
+    }
+
+    public function test_root_mapping_under_src_must_match_axolotl_namespace_layout(): void
+    {
+        $project = $this->copyFixture('BuildPlugin');
+        $this->json($project . '/composer.json', ['autoload' => ['psr-4' => ['Fixture\\Build\\Extra\\' => 'src/extra/']]]);
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('Axolotl-PM expects src/Extra');
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+    }
+
+    public function test_root_mapping_matching_axolotl_layout_requires_no_extra_loader(): void
+    {
+        $project = $this->copyFixture('BuildPlugin');
+        $this->json($project . '/composer.json', ['autoload' => ['psr-4' => ['Fixture\\Build\\' => 'src/', 'Fixture\\Build\\Extra\\' => 'src/Extra/']]]);
+        self::assertSame([], (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared'));
+    }
+
+    /** @param array<string, mixed>|null $autoload */
+    private function project(?array $autoload = null): string
+    {
+        $project = $this->copyFixture('BuildPlugin');
+        unlink($project . '/devtools.yml');
+        $main = file_get_contents($project . '/src/Main.php');
+        self::assertIsString($main);
+        file_put_contents($project . '/src/Main.php', str_replace('Shared\\Virion', 'Example\\LibraryA', $main));
+        $root = ['name' => 'example/plugin', 'require' => ['example/a' => '^1.0'], 'require-dev' => ['example/dev' => '*']];
+        $this->json($project . '/composer.json', $root);
+        $a = ['name' => 'example/a', 'version' => '1.0.0', 'source' => ['type' => 'git', 'url' => 'https://example.invalid/a', 'reference' => str_repeat('a', 40)], 'autoload' => $autoload ?? ['psr-4' => ['Example\\LibraryA\\' => 'src/']], 'require' => ['php' => '^8.1', 'example/b' => '^1.0'], 'extra' => ['virion' => ['spec' => '3.0', 'namespace-root' => 'Example\\LibraryA']]];
+        $b = ['name' => 'example/b', 'version' => '1.1.0', 'autoload' => ['psr-4' => ['Example\\LibraryB\\' => 'src/']], 'extra' => ['virion' => ['spec' => '3.0', 'namespace-root' => 'Example\\LibraryB']]];
+        ksort($root);
+        $this->json($project . '/composer.lock', ['content-hash' => md5(json_encode($root, JSON_THROW_ON_ERROR)), 'packages' => [$a, $b], 'packages-dev' => [['name' => 'example/dev']]]);
+        $this->filesystem->ensureDirectory($project . '/vendor/composer');
+        $this->json($project . '/vendor/composer/installed.json', ['packages' => [$a, $b]]);
+        foreach (['a' => $a, 'b' => $b] as $name => $package) {
+            $this->filesystem->ensureDirectory($project . '/vendor/example/' . $name . '/src');
+            $this->json($project . '/vendor/example/' . $name . '/composer.json', $package);
+            file_put_contents($project . '/vendor/example/' . $name . '/LICENSE', 'Fixture license');
+        }
+        file_put_contents($project . '/vendor/example/a/src/Greeting.php', '<?php namespace Example\\LibraryA; final class Greeting { public static function message(): string { return \\Example\\LibraryB\\Greeting::message(); } }');
+        file_put_contents($project . '/vendor/example/b/src/Greeting.php', '<?php namespace Example\\LibraryB; final class Greeting { public static function message(): string { return file_get_contents(__DIR__ . "/message.txt"); } }');
+        file_put_contents($project . '/vendor/example/b/src/message.txt', 'composed resource');
+        return $project;
+    }
+
+    /** @param array<string, mixed> $value */
+    private function json(string $path, array $value): void
+    {
+        file_put_contents($path, json_encode($value, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+    }
+}

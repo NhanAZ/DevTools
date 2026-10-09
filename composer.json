@@ -1,0 +1,85 @@
+{
+    "name": "nhanaz/devtools",
+    "description": "Folder loading, shared development virions and standalone plugin PHAR tooling for Axolotl-PM",
+    "keywords": [
+        "pocketmine-mp",
+        "plugin-development",
+        "virion"
+    ],
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/axolotl-pm/PocketMine-MP",
+            "no-api": true
+        }
+    ],
+    "homepage": "https://github.com/NhanAZ/DevTools",
+    "type": "pocketmine-plugin",
+    "license": "MIT",
+    "require": {
+        "php": "^8.1",
+        "ext-json": "*",
+        "ext-phar": "*",
+        "ext-yaml": "*",
+        "nikic/php-parser": "^5.6"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^10.5",
+        "axolotl-pm/pocketmine-mp": "dev-stable"
+    },
+    "autoload": {
+        "psr-4": {
+            "NhanAZ\\DevTools\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "NhanAZ\\DevTools\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": false,
+        "platform": {
+            "php": "8.1.0"
+        },
+        "sort-packages": true
+    },
+    "extra": {
+        "devtools": {
+            "release-version": "1.0.0"
+        }
+    },
+    "support": {
+        "issues": "https://github.com/NhanAZ/DevTools/issues",
+        "source": "https://github.com/NhanAZ/DevTools"
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "scripts": {
+        "artifact": "@php bin/validate-artifact.php build/DevTools.phar",
+        "build": "@php -d phar.readonly=0 bin/devtools-build.php --overwrite",
+        "build:self": "@build",
+        "docs": "@php bin/check-doc-links.php",
+        "check": [
+            "composer validate --strict",
+            "@syntax",
+            "@lint",
+            "@phpstan",
+            "@test",
+            "@docs",
+            "@build",
+            "@artifact"
+        ],
+        "test": "@php -d phar.readonly=0 vendor/bin/phpunit --colors=always",
+        "test:loader": "@php -d phar.readonly=0 vendor/bin/phpunit --testsuite loader --colors=always",
+        "test:virion": "@php -d phar.readonly=0 vendor/bin/phpunit --testsuite virion --colors=always",
+        "test:build": "@php -d phar.readonly=0 vendor/bin/phpunit --testsuite build --colors=always",
+        "analyse": "@phpstan",
+        "phpstan": "@php vendor/bin/phpstan analyse --no-progress",
+        "lint": "@php vendor/bin/php-cs-fixer check --diff --verbose",
+        "qa": "@check",
+        "syntax": "@php bin/check-syntax.php"
+    }
+}

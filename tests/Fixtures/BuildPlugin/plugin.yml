@@ -1,0 +1,5 @@
+name: BuildFixture
+version: 1.0.0
+main: Fixture\Build\Main
+api: 5.0.0
+src-namespace-prefix: Fixture\Build

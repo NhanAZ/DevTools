@@ -1,0 +1,17 @@
+/.php-cs-fixer.cache
+/.phpunit.cache/
+/.phpstan-cache/
+/.devtools-dependencies/
+/.env
+/.env.*
+/build/
+/logs/
+/vendor/
+/tests/Fixtures/PhpStanServer/vendor/
+/.DS_Store
+/Thumbs.db
+auth.json
+composer.phar
+*.tmp
+*.phar
+*.log

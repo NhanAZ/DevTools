@@ -1,0 +1,4 @@
+# Build metadata needed only for packaging DevTools itself.
+include-paths:
+  - vendor/nikic/php-parser/lib
+  - vendor/nikic/php-parser/LICENSE

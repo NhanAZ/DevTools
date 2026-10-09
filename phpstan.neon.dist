@@ -1,0 +1,13 @@
+parameters:
+    level: max
+    phpVersion: 80100
+    paths:
+        - src
+        - bin
+        - tests
+    excludePaths:
+        analyseAndScan:
+            - tests/Fixtures/PhpStanServer
+    tmpDir: .phpstan-cache
+    reportUnmatchedIgnoredErrors: true
+    checkMissingCallableSignature: true

@@ -1,0 +1,4 @@
+name: SharedGreeting
+version: 1.0.0
+antigen: DevToolsExample\SharedGreeting
+api: 5.0.0

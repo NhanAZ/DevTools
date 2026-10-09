@@ -1,0 +1,4 @@
+name: ConflictingVirion
+version: 2.0.0
+antigen: Shared\Virion
+api: 5.0.0

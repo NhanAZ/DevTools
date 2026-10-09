@@ -1,0 +1,115 @@
+name: Publish a built plugin PHAR
+
+on:
+  workflow_call:
+    inputs:
+      devtools-ref:
+        description: Required full DevTools commit SHA matching the reusable workflow revision.
+        type: string
+        required: true
+      mode:
+        description: tag for an existing version tag, or nightly for an immutable commit prerelease.
+        type: string
+        default: tag
+      prerelease:
+        description: auto, true, or false. Prerelease version suffixes always require a prerelease.
+        type: string
+        default: auto
+      project:
+        type: string
+        default: .
+      virions:
+        type: string
+        default: virions
+      prepare-dependencies:
+        type: boolean
+        default: false
+      php-version:
+        type: string
+        default: '8.1'
+    outputs:
+      artifact-id:
+        value: ${{ jobs.build.outputs.artifact-id }}
+      sha256:
+        value: ${{ jobs.build.outputs.sha256 }}
+      release-url:
+        value: ${{ jobs.publish.outputs.release-url }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: devtools-publish-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: (inputs.mode == 'tag' && github.ref_type == 'tag' && github.event_name == 'push') || (inputs.mode == 'nightly' && github.ref_type == 'branch' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'))
+    uses: ./.github/workflows/build-plugin.yml
+    permissions:
+      contents: read
+    with:
+      devtools-ref: ${{ inputs.devtools-ref }}
+      project: ${{ inputs.project }}
+      virions: ${{ inputs.virions }}
+      prepare-dependencies: ${{ inputs.prepare-dependencies }}
+      php-version: ${{ inputs.php-version }}
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    outputs:
+      release-url: ${{ steps.publish.outputs.release-url }}
+    steps:
+      - name: Check out release verification tools
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: NhanAZ/DevTools
+          ref: ${{ inputs.devtools-ref }}
+          path: .devtools-tool
+          persist-credentials: false
+
+      - name: Download the exact build artifact
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/release-artifact
+
+      - name: Verify artifact hash and release version
+        id: verify
+        env:
+          EXPECTED_SHA256: ${{ needs.build.outputs.sha256 }}
+          ARTIFACT_DIRECTORY: ${{ runner.temp }}/release-artifact
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_PRERELEASE: ${{ inputs.prerelease }}
+        run: node .devtools-tool/.github/scripts/artifact-contract.mjs release "$ARTIFACT_DIRECTORY/build-metadata.json"
+
+      - name: Publish the verified artifact without rebuilding
+        id: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_MODE: ${{ inputs.mode }}
+          RELEASE_TAG: ${{ steps.verify.outputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_PRERELEASE: ${{ steps.verify.outputs.prerelease }}
+          PLUGIN_NAME: ${{ steps.verify.outputs.plugin-name }}
+          PLUGIN_VERSION: ${{ steps.verify.outputs.plugin-version }}
+          PHAR: ${{ steps.verify.outputs.phar }}
+          ARTIFACT_DIRECTORY: ${{ runner.temp }}/release-artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLAGS=(--generate-notes)
+          if [ "$RELEASE_MODE" = tag ]; then FLAGS+=(--verify-tag); else FLAGS+=(--target "$RELEASE_SHA" --latest=false); fi
+          if [ "$RELEASE_PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" "$PHAR" "$ARTIFACT_DIRECTORY/build-metadata.json" "$ARTIFACT_DIRECTORY/SHA256SUMS.txt" \
+            --title "$PLUGIN_NAME $PLUGIN_VERSION ($RELEASE_TAG)" "${FLAGS[@]}"
+          URL="$(gh release view "$RELEASE_TAG" --json url --jq .url)"
+          printf 'release-url=%s\n' "$URL" >> "$GITHUB_OUTPUT"
