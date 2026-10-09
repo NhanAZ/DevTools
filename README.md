@@ -10,7 +10,7 @@ DevTools supports [Axolotl-PM](https://github.com/axolotl-pm/PocketMine-MP). Use
 
 ## Quick start
 
-1. Download `DevTools-1.0.1.phar` from the [latest release](https://github.com/NhanAZ/DevTools/releases/latest). Do not download "Source code" unless you are developing DevTools.
+1. Download the installable DevTools PHAR from the [latest release](https://github.com/NhanAZ/DevTools/releases/latest). Do not download "Source code" unless you are developing DevTools.
 2. Stop your Axolotl-PM server, copy the PHAR to `plugins/DevTools.phar`, and start the server again.
 3. Confirm the console says that folder loading, shared virions, and PHAR building are ready. Run `/devtools status` as an operator.
 4. Put a development plugin folder containing `plugin.yml` and `src/` directly inside `plugins/`.
@@ -83,7 +83,7 @@ The [HelloShared plugin and SharedGreeting library](examples/README.md) demonstr
 
 ## Build on every commit
 
-Plugin repositories can use the [reusable workflow](docs/github-actions.md#short-build-workflow) for a normal build, or `NhanAZ/DevTools@v1.0.1` as a step-level GitHub Action when the workflow needs explicit setup or PHPStan server checkouts. The tested workflow in `examples/.github/workflows/build.yml` builds a standalone PHAR on every push and pull request and uploads it to the workflow run's **Artifacts** section. PHPStan remains off unless the workflow explicitly selects a level and server source. See [Build a PHAR on every commit](docs/github-actions.md) for both paths.
+Plugin repositories can use the [reusable workflow](docs/github-actions.md#short-build-workflow) for a normal build, including PHPStan with a pinned Axolotl-PM source. Use the step-level GitHub Action when the workflow needs additional setup or source checkouts. The tested workflow in `examples/.github/workflows/build.yml` builds a standalone PHAR on every push and pull request and uploads it to the workflow run's **Artifacts** section. PHPStan remains off unless the workflow explicitly selects a level and server source. See [Build a PHAR on every commit](docs/github-actions.md) for both paths.
 
 ## Build with a coding agent
 

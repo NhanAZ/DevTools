@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2 - 2026-10-10
+
+- Let the reusable plugin build workflow check out a full, pinned Axolotl-PM source commit for PHPStan analysis.
+- Inspect the PHAR archive before the reusable workflow uploads its artifact.
+- Exercise the reusable workflow with a fixture plugin, PHPStan maximum level and the pinned Axolotl-PM source in hosted CI.
+- Keep the step-level action and existing workflow inputs compatible with version 1.0.1.
+
 ## 1.0.1 - 2026-10-10
 
 - Treat `pocketmine/pocketmine-mp` as the server platform only when the locked Axolotl-PM package explicitly replaces it. Continue rejecting missing or unrelated packages.

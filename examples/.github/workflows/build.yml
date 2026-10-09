@@ -1,4 +1,4 @@
-name: Build PHAR
+name: Build and validate example plugin
 
 on:
   push:
@@ -39,7 +39,7 @@ jobs:
 
       - name: Build standalone plugin PHAR
         id: build
-        uses: NhanAZ/DevTools@v1.0.1
+        uses: NhanAZ/DevTools@v1.0.2
         with:
           project: HelloShared
           virions: .

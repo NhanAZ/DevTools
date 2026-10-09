@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 final class RepositoryMetadataTest extends TestCase
 {
-    private const VERSION = '1.0.1';
+    private const VERSION = '1.0.2';
     private const PHP_ACTION_COMMIT = 'b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e';
 
     public function test_release_version_is_synchronized(): void
@@ -85,6 +85,10 @@ final class RepositoryMetadataTest extends TestCase
         self::assertStringContainsString('artifact-id: ${{ steps.upload.outputs.artifact-id }}', $reusable);
         self::assertStringContainsString('contents: read', $reusable);
         self::assertStringContainsString('devtools-ref must be a full lowercase commit SHA', $reusable);
+        self::assertStringContainsString('axolotl-ref must be a full lowercase commit SHA', $reusable);
+        self::assertStringContainsString('repository: axolotl-pm/PocketMine-MP', $reusable);
+        self::assertStringContainsString('Inspect built PHAR archive', $reusable);
+        self::assertStringContainsString('Build pinned fixture with PHPStan max', $ci);
         self::assertStringNotContainsString('default: main', $reusable);
 
         foreach ([$ci, $candidate, $reusable] as $workflow) {
