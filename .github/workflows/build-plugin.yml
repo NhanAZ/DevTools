@@ -7,6 +7,11 @@ on:
         description: Required full DevTools commit SHA. Pin the reusable workflow to the same SHA.
         required: true
         type: string
+      axolotl-ref:
+        description: Optional full Axolotl-PM source commit SHA to check out for PHPStan.
+        required: false
+        default: ''
+        type: string
       prepare-dependencies:
         description: Explicitly install locked Composer runtime dependencies and prepare supported virions.
         required: false
@@ -111,6 +116,51 @@ jobs:
       - name: Check out plugin source
         uses: actions/checkout@v7.0.1
 
+      - name: Require an immutable Axolotl-PM revision
+        if: inputs.axolotl-ref != ''
+        shell: bash
+        env:
+          AXOLOTL_REF: ${{ inputs.axolotl-ref }}
+        run: |
+          if [[ ! "$AXOLOTL_REF" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "axolotl-ref must be a full lowercase commit SHA." >&2
+            exit 2
+          fi
+
+      - name: Check out pinned Axolotl-PM source
+        if: inputs.axolotl-ref != ''
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: axolotl-pm/PocketMine-MP
+          ref: ${{ inputs.axolotl-ref }}
+          path: .devtools-dependencies/axolotl-pm
+          persist-credentials: false
+
+      - name: Select PHPStan server sources
+        id: analysis-sources
+        shell: bash
+        env:
+          AXOLOTL_REF: ${{ inputs.axolotl-ref }}
+          EXTRA_SERVER_SOURCES: ${{ inputs.phpstan-server }}
+        run: |
+          if [ -n "$AXOLOTL_REF" ]; then
+            test "$(git -C .devtools-dependencies/axolotl-pm rev-parse HEAD)" = "$AXOLOTL_REF"
+          fi
+          if [ -z "$AXOLOTL_REF" ] && [ -z "$EXTRA_SERVER_SOURCES" ]; then
+            echo 'paths=' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo 'paths<<EOF'
+            if [ -n "$AXOLOTL_REF" ]; then
+              echo '.devtools-dependencies/axolotl-pm'
+            fi
+            if [ -n "$EXTRA_SERVER_SOURCES" ]; then
+              printf '%s\n' "$EXTRA_SERVER_SOURCES"
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Check out Axolotl-PM PHP setup helper
         uses: actions/checkout@v7.0.1
         with:
@@ -157,8 +207,15 @@ jobs:
           output: ${{ inputs.output }}
           overwrite: ${{ inputs.overwrite }}
           phpstan: ${{ inputs.phpstan }}
-          phpstan-server: ${{ inputs.phpstan-server }}
+          phpstan-server: ${{ steps.analysis-sources.outputs.paths }}
           phpstan-paths: ${{ inputs.phpstan-paths }}
+
+      - name: Inspect built PHAR archive
+        shell: bash
+        env:
+          PROJECT_PATH: ${{ inputs.project }}
+          BUILD_PHAR: ${{ steps.devtools.outputs.phar }}
+        run: php .devtools-dependencies/tool/bin/devtools.php inspect --project="$PROJECT_PATH" --artifact="$BUILD_PHAR" --json
 
       - name: Read artifact metadata
         id: metadata

@@ -14,6 +14,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  reusable-build:
+    name: Build pinned fixture with PHPStan max
+    uses: ./.github/workflows/build-plugin.yml
+    with:
+      devtools-ref: ${{ github.sha }}
+      axolotl-ref: dfe0d07e48a9e8d5a4a242fa43ff1cd3b743a955
+      project: tests/Fixtures/ValidPlugin
+      phpstan: max
+
   quality:
     name: PHP ${{ matrix.php }} full gate
     runs-on: ubuntu-24.04
