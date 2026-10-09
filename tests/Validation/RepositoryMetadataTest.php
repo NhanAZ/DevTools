@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 final class RepositoryMetadataTest extends TestCase
 {
-    private const VERSION = '1.0.2';
+    private const VERSION = '1.0.3';
     private const PHP_ACTION_COMMIT = 'b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e';
 
     public function test_release_version_is_synchronized(): void
@@ -80,11 +80,14 @@ final class RepositoryMetadataTest extends TestCase
         self::assertStringContainsString('gh release create', $release);
         self::assertStringContainsString('workflow_call:', $reusable);
         self::assertStringContainsString('uses: ./.devtools-dependencies/tool', $reusable);
-        self::assertStringContainsString('ref: ${{ inputs.devtools-ref }}', $reusable);
+        self::assertStringContainsString('ref: ${{ steps.workflow-identity.outputs.sha }}', $reusable);
+        self::assertStringContainsString('repository: ${{ steps.workflow-identity.outputs.repository }}', $reusable);
+        self::assertStringContainsString("'.workflow_sha // empty'", $reusable);
+        self::assertStringContainsString("'.workflow_repository // empty'", $reusable);
         self::assertStringContainsString('uses: actions/upload-artifact@v7.0.1', $reusable);
         self::assertStringContainsString('artifact-id: ${{ steps.upload.outputs.artifact-id }}', $reusable);
         self::assertStringContainsString('contents: read', $reusable);
-        self::assertStringContainsString('devtools-ref must be a full lowercase commit SHA', $reusable);
+        self::assertStringContainsString('devtools-ref is deprecated and ignored', $reusable);
         self::assertStringContainsString('axolotl-ref must be a full lowercase commit SHA', $reusable);
         self::assertStringContainsString('repository: axolotl-pm/PocketMine-MP', $reusable);
         self::assertStringContainsString('Inspect built PHAR archive', $reusable);
@@ -196,7 +199,7 @@ final class RepositoryMetadataTest extends TestCase
         self::assertStringContainsString('(dependencies.md)', $agentGuide);
         self::assertStringContainsString('(github-actions.md)', $agentGuide);
         self::assertIsString($agentTemplate);
-        self::assertStringContainsString('build-plugin.yml@v' . self::VERSION, $agentTemplate);
+        self::assertStringContainsString('build-plugin.yml` at the full commit resolved from `v' . self::VERSION, $agentTemplate);
         self::assertStringContainsString('Do not guess virion repositories', $agentTemplate);
         self::assertStringContainsString('Upload exactly one artifact', $agentTemplate);
     }

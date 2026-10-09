@@ -4,8 +4,9 @@ on:
   workflow_call:
     inputs:
       devtools-ref:
-        description: Required full DevTools commit SHA. Pin the reusable workflow to the same SHA.
-        required: true
+        description: Deprecated compatibility input. The workflow checks out its own immutable revision.
+        required: false
+        default: ''
         type: string
       axolotl-ref:
         description: Optional full Axolotl-PM source commit SHA to check out for PHPStan.
@@ -103,14 +104,22 @@ jobs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
       sha256: ${{ steps.devtools.outputs.sha256 }}
     steps:
-      - name: Require an immutable builder revision
+      - name: Verify the reusable workflow revision
+        id: workflow-identity
         shell: bash
         env:
-          DEVTOOLS_REF: ${{ inputs.devtools-ref }}
+          JOB_CONTEXT: ${{ toJSON(job) }}
+          LEGACY_REF: ${{ inputs.devtools-ref }}
         run: |
-          if [[ ! "$DEVTOOLS_REF" =~ ^[a-f0-9]{40}$ ]]; then
-            echo "devtools-ref must be a full lowercase commit SHA. Use the same SHA in the reusable workflow reference. Branches and tags are not accepted." >&2
+          WORKFLOW_SHA="$(jq -r '.workflow_sha // empty' <<< "$JOB_CONTEXT")"
+          WORKFLOW_REPOSITORY="$(jq -r '.workflow_repository // empty' <<< "$JOB_CONTEXT")"
+          if [[ ! "$WORKFLOW_SHA" =~ ^[a-f0-9]{40}$ || ! "$WORKFLOW_REPOSITORY" =~ ^[^/]+/[^/]+$ ]]; then
+            echo "GitHub did not provide an immutable reusable workflow identity." >&2
             exit 2
+          fi
+          printf 'sha=%s\nrepository=%s\n' "$WORKFLOW_SHA" "$WORKFLOW_REPOSITORY" >> "$GITHUB_OUTPUT"
+          if [ -n "$LEGACY_REF" ]; then
+            echo "::warning::devtools-ref is deprecated and ignored; the builder follows the called workflow revision."
           fi
 
       - name: Check out plugin source
@@ -180,15 +189,15 @@ jobs:
       - name: Check out the selected DevTools revision
         uses: actions/checkout@v7.0.1
         with:
-          repository: NhanAZ/DevTools
-          ref: ${{ inputs.devtools-ref }}
+          repository: ${{ steps.workflow-identity.outputs.repository }}
+          ref: ${{ steps.workflow-identity.outputs.sha }}
           path: .devtools-dependencies/tool
           persist-credentials: false
 
       - name: Verify checked-out builder identity and CLI contract
         shell: bash
         env:
-          DEVTOOLS_REF: ${{ inputs.devtools-ref }}
+          DEVTOOLS_REF: ${{ steps.workflow-identity.outputs.sha }}
         run: |
           set -euo pipefail
           test "$(git -C .devtools-dependencies/tool rev-parse HEAD)" = "$DEVTOOLS_REF"

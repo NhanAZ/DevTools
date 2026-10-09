@@ -2,13 +2,13 @@
 
 The composite action calls `bin/devtools.php build --json`, using the same builder as the CLI and server command. It verifies the reported PHAR SHA-256 and exposes the actual path from that result. PHPStan and Composer dependency preparation are opt-in. A successful build verifies packaging. It does not prove an Axolotl-PM runtime boot.
 
-These interfaces are available in `v1.0.2`. The composite action can use `NhanAZ/DevTools@v1.0.2` directly. Reusable workflows require an explicit full 40-character lowercase **builder commit** in `devtools-ref`. A tag is accepted in the outer `uses:` reference but not in that input. Resolve the release tag before copying the reusable examples.
+These interfaces are available in `v1.0.3`. The composite action can use `NhanAZ/DevTools@v1.0.3` directly. Pin a reusable workflow to a reviewed full commit SHA. The workflow checks out its builder from that same commit using the current job's workflow identity. The deprecated `devtools-ref` input is accepted for existing callers but ignored, so a dependency update does not leave the builder at an older revision.
 
 ```sh
-git ls-remote https://github.com/NhanAZ/DevTools.git 'refs/tags/v1.0.2^{}'
+git ls-remote https://github.com/NhanAZ/DevTools.git 'refs/tags/v1.0.3^{}'
 ```
 
-Copy the first column (the annotated tag's commit) into every `REVIEWED_DEVTOOLS_COMMIT_SHA` below. The workflow reference uses `v1.0.2`, which must resolve to that same commit. This avoids confusing the plugin caller's `github.sha` with the builder revision. No release is performed merely by installing DevTools.
+Copy the first column (the annotated tag's commit) into `REVIEWED_DEVTOOLS_COMMIT_SHA` in each reusable workflow reference below. This keeps the dependency reference immutable and lets Dependabot recognize it. The caller's `github.sha` identifies the plugin, while the called job's workflow identity identifies DevTools. No release is performed merely by installing DevTools.
 
 ## Short build workflow
 
@@ -24,16 +24,15 @@ permissions:
   contents: read
 jobs:
   build:
-    uses: NhanAZ/DevTools/.github/workflows/build-plugin.yml@v1.0.2
+    uses: NhanAZ/DevTools/.github/workflows/build-plugin.yml@REVIEWED_DEVTOOLS_COMMIT_SHA
     with:
-      devtools-ref: REVIEWED_DEVTOOLS_COMMIT_SHA
       php-version: '8.1'
       retention-days: 14
 ```
 
 The reusable workflow checks out the plugin, sets up Axolotl-PM PHP using setup-helper commit `b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e`, checks out the selected DevTools revision, builds, inspects the PHAR and uploads one artifact containing the PHAR plus `build-metadata.json`. Find that artifact under **Actions -> workflow run -> Artifacts**. The metadata contains the tool version, plugin version, resolved dependency information, checks, and PHAR hash from the versioned [CLI contract](cli.md).
 
-Default `project: .` expects `plugin.yml` and `src/` at the repository root. A plugin without virions needs no Composer manifest or additional DevTools configuration. Local virions remain usable through `virions: virions`. The included `examples/.github/workflows/build.yml` uses the v1.0.2 composite action for `HelloShared` and `SharedGreeting`.
+Default `project: .` expects `plugin.yml` and `src/` at the repository root. A plugin without virions needs no Composer manifest or additional DevTools configuration. Local virions remain usable through `virions: virions`. The included `examples/.github/workflows/build.yml` uses the v1.0.3 composite action for `HelloShared` and `SharedGreeting`.
 
 ## Explicit Composer dependency preparation
 
@@ -41,7 +40,6 @@ If the project uses supported Composer Virion v3 packages, commit its `composer.
 
 ```yaml
     with:
-      devtools-ref: REVIEWED_DEVTOOLS_COMMIT_SHA
       prepare-dependencies: true
       virions: .devtools-virions
 ```
@@ -56,7 +54,7 @@ Use the composite action when your repository needs extra checkouts or checks. S
 
 ```yaml
       - id: build
-        uses: NhanAZ/DevTools@v1.0.2
+        uses: NhanAZ/DevTools@v1.0.3
         with:
           project: .
           virions: virions
@@ -88,7 +86,7 @@ The composite action installs its own locked tool dependencies with scripts and 
 | `sha256` | output | - | SHA-256 of the exact PHAR. |
 | `metadata` | output | - | Absolute path to the CLI JSON build result. |
 
-The reusable build workflow requires `devtools-ref` and adds `php-version`, `pm-version-major`, `artifact-name`, `retention-days`, `axolotl-ref`, and `phpstan-server` inputs. Set `axolotl-ref` to a full Axolotl-PM source commit SHA to let the workflow check out that revision before PHPStan. Keep the server source commit independent of the tested runtime version. The workflow exports `plugin-name`, `plugin-version`, `sha256`, `artifact-name`, and immutable `artifact-id`. Local artifact paths are only meaningful inside the build job. Another job must download using `artifact-id`.
+The reusable build workflow adds `php-version`, `pm-version-major`, `artifact-name`, `retention-days`, `axolotl-ref`, and `phpstan-server` inputs. Set `axolotl-ref` to a full Axolotl-PM source commit SHA to let the workflow check out that revision before PHPStan. Keep the server source commit independent of the tested runtime version. The workflow exports `plugin-name`, `plugin-version`, `sha256`, `artifact-name`, and immutable `artifact-id`. Local artifact paths are only meaningful inside the build job. Another job must download using `artifact-id`.
 
 ## Optional static analysis
 
@@ -102,7 +100,7 @@ Check out the Axolotl-PM source, then pass its local path to the composite actio
           path: .devtools-server
           persist-credentials: false
       - id: build
-        uses: NhanAZ/DevTools@v1.0.2
+        uses: NhanAZ/DevTools@v1.0.3
         with:
           phpstan: '4'
           phpstan-server: .devtools-server
@@ -126,13 +124,12 @@ permissions:
   actions: read
 jobs:
   release:
-    uses: NhanAZ/DevTools/.github/workflows/release-plugin.yml@v1.0.2
+    uses: NhanAZ/DevTools/.github/workflows/release-plugin.yml@REVIEWED_DEVTOOLS_COMMIT_SHA
     with:
-      devtools-ref: REVIEWED_DEVTOOLS_COMMIT_SHA
       mode: tag
 ```
 
-The reusable release workflow builds with read-only repository permissions. Its publish job uses the same required immutable DevTools SHA, downloads the immutable artifact ID, checks the PHAR bytes against both downloaded metadata and the SHA-256 passed directly from the build job, then publishes **those bytes without rebuilding**. The release assets are the PHAR, `build-metadata.json`, and `SHA256SUMS.txt`. The publish job executes verification tools, not plugin code. Only publication has `contents: write`.
+The reusable release workflow builds with read-only repository permissions. Its publish job checks out the release tools from its own workflow commit, downloads the immutable artifact ID, checks the PHAR bytes against both downloaded metadata and the SHA-256 passed directly from the build job, then publishes **those bytes without rebuilding**. The release assets are the PHAR, `build-metadata.json`, and `SHA256SUMS.txt`. The publish job executes verification tools, not plugin code. Only publication has `contents: write`.
 
 A tag must match the complete `plugin.yml` version, with an optional leading `v`. For example, `v1.2.3-rc.1` requires `version: 1.2.3-rc.1`, not `1.2.3`. Versions have three numeric components and optional prerelease and build suffixes. Prerelease suffixes automatically set GitHub prerelease status. Input `prerelease: 'true'` may mark an otherwise stable version as a prerelease. `'false'` cannot turn an explicit prerelease version into a stable release. The default is `'auto'`.
 
@@ -153,9 +150,8 @@ permissions:
   actions: read
 jobs:
   nightly:
-    uses: NhanAZ/DevTools/.github/workflows/release-plugin.yml@v1.0.2
+    uses: NhanAZ/DevTools/.github/workflows/release-plugin.yml@REVIEWED_DEVTOOLS_COMMIT_SHA
     with:
-      devtools-ref: REVIEWED_DEVTOOLS_COMMIT_SHA
       mode: nightly
 ```
 
@@ -163,7 +159,7 @@ Nightly runs use `nightly-<full commit SHA>` tags, always prerelease and never l
 
 ## Select the builder revision
 
-Reusable workflows require a full commit SHA in `devtools-ref`. The outer workflow reference may use that SHA or a release tag resolving to it. Branch names, tags and short SHAs are rejected in the input. The workflow verifies the checked-out HEAD and CLI contract before building. Select both references explicitly because the caller's `github.sha` identifies the plugin, not DevTools.
+Pin the outer reusable workflow `uses:` to the full commit SHA from a reviewed release tag. The called job reads its own `workflow_sha` and `workflow_repository`, checks out that revision, and verifies the checked-out HEAD and CLI contract before building. The same rule applies to release verification. Do not pass `devtools-ref` for new callers; it is ignored for compatibility with existing workflow files. GitHub's workflow identity context is available on GitHub.com; these reusable workflows are not supported on GitHub Enterprise Server without that context.
 
 ## Releasing DevTools itself
 

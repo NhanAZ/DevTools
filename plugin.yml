@@ -1,5 +1,5 @@
 name: DevTools
-version: 1.0.2
+version: 1.0.3
 main: NhanAZ\DevTools\DevTools
 api: 5.0.0
 load: STARTUP

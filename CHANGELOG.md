@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.3 - 2026-10-10
+
+- Check out the build and release verification tools from the exact commit that defines each reusable workflow job.
+- Let Dependabot update one reusable workflow reference without a second revision input becoming stale.
+- Keep `devtools-ref` as a deprecated, ignored input for existing callers; warn when it is provided.
+
 ## 1.0.2 - 2026-10-10
 
 - Let the reusable plugin build workflow check out a full, pinned Axolotl-PM source commit for PHPStan analysis.

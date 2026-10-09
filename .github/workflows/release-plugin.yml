@@ -4,9 +4,10 @@ on:
   workflow_call:
     inputs:
       devtools-ref:
-        description: Required full DevTools commit SHA matching the reusable workflow revision.
+        description: Deprecated compatibility input. The workflow checks out its own immutable revision.
         type: string
-        required: true
+        required: false
+        default: ''
       mode:
         description: tag for an existing version tag, or nightly for an immutable commit prerelease.
         type: string
@@ -49,7 +50,6 @@ jobs:
     permissions:
       contents: read
     with:
-      devtools-ref: ${{ inputs.devtools-ref }}
       project: ${{ inputs.project }}
       virions: ${{ inputs.virions }}
       prepare-dependencies: ${{ inputs.prepare-dependencies }}
@@ -64,13 +64,38 @@ jobs:
     outputs:
       release-url: ${{ steps.publish.outputs.release-url }}
     steps:
+      - name: Verify the reusable release workflow revision
+        id: workflow-identity
+        shell: bash
+        env:
+          JOB_CONTEXT: ${{ toJSON(job) }}
+          LEGACY_REF: ${{ inputs.devtools-ref }}
+        run: |
+          set -euo pipefail
+          WORKFLOW_SHA="$(jq -r '.workflow_sha // empty' <<< "$JOB_CONTEXT")"
+          WORKFLOW_REPOSITORY="$(jq -r '.workflow_repository // empty' <<< "$JOB_CONTEXT")"
+          if [[ ! "$WORKFLOW_SHA" =~ ^[a-f0-9]{40}$ || ! "$WORKFLOW_REPOSITORY" =~ ^[^/]+/[^/]+$ ]]; then
+            echo "GitHub did not provide an immutable reusable workflow identity." >&2
+            exit 2
+          fi
+          printf 'sha=%s\nrepository=%s\n' "$WORKFLOW_SHA" "$WORKFLOW_REPOSITORY" >> "$GITHUB_OUTPUT"
+          if [ -n "$LEGACY_REF" ]; then
+            echo "::warning::devtools-ref is deprecated and ignored; release verification follows the called workflow revision."
+          fi
+
       - name: Check out release verification tools
         uses: actions/checkout@v7.0.1
         with:
-          repository: NhanAZ/DevTools
-          ref: ${{ inputs.devtools-ref }}
+          repository: ${{ steps.workflow-identity.outputs.repository }}
+          ref: ${{ steps.workflow-identity.outputs.sha }}
           path: .devtools-tool
           persist-credentials: false
+
+      - name: Verify release tool revision
+        shell: bash
+        env:
+          WORKFLOW_SHA: ${{ steps.workflow-identity.outputs.sha }}
+        run: test "$(git -C .devtools-tool rev-parse HEAD)" = "$WORKFLOW_SHA"
 
       - name: Download the exact build artifact
         uses: actions/download-artifact@v8
