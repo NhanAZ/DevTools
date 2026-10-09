@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NhanAZ\DevTools\Tests\Build;
 
 use NhanAZ\DevTools\Build\BuildException;
+use NhanAZ\DevTools\Build\ComposerVirionPlan;
 use NhanAZ\DevTools\Build\ComposerVirionPreparer;
 use NhanAZ\DevTools\Tests\TestCase;
 use Phar;
@@ -32,6 +33,64 @@ final class ComposerVirionPreparerTest extends TestCase
         require_once 'phar://' . str_replace('\\', '/', $result->outputPath) . '/' . $relativeB;
         require_once 'phar://' . str_replace('\\', '/', $result->outputPath) . '/' . $relativeA;
         self::assertSame('composed resource', ($a . '\\Greeting')::message());
+    }
+
+    public function test_axolotl_server_replacement_satisfies_transitive_pocketmine_requirement(): void
+    {
+        $project = $this->project();
+        $plan = new ComposerVirionPlan();
+        $lock = $plan->readJson($project . '/composer.lock');
+        $packages = $lock['packages'] ?? null;
+        self::assertIsArray($packages);
+        $package = $plan->object($packages[0] ?? null, 'fixture package');
+        $require = $plan->object($package['require'] ?? null, 'fixture requirements');
+        $require['pocketmine/pocketmine-mp'] = '^5.0';
+        $require['composer-runtime-api'] = '^2.0';
+        $require['php-64bit'] = '*';
+        $package['require'] = $require;
+        $packages[0] = $package;
+        $packages[] = [
+            'name' => 'axolotl-pm/pocketmine-mp',
+            'version' => '5.49.1',
+            'replace' => ['pocketmine/pocketmine-mp' => '*'],
+        ];
+        $lock['packages'] = $packages;
+        $this->json($project . '/composer.lock', $lock);
+        $installed = $plan->readJson($project . '/vendor/composer/installed.json');
+        $installedPackages = $installed['packages'] ?? null;
+        self::assertIsArray($installedPackages);
+        $installedPackages[0] = $package;
+        $installed['packages'] = $installedPackages;
+        $this->json($project . '/vendor/composer/installed.json', $installed);
+        $this->json($project . '/vendor/example/a/composer.json', $package);
+
+        $prepared = (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+        self::assertCount(2, $prepared);
+        $manifest = file_get_contents($this->temporaryDirectory . '/prepared/example.a/virion.yml');
+        self::assertIsString($manifest);
+        self::assertStringContainsString('php-64bit', $manifest);
+        self::assertStringNotContainsString('composer-runtime-api', $manifest);
+        self::assertCount(2, $this->builder()->build($project, $this->temporaryDirectory . '/prepared', $project . '/build')->dependencies);
+    }
+
+    public function test_transitive_pocketmine_requirement_without_axolotl_replacement_fails(): void
+    {
+        $project = $this->project();
+        $plan = new ComposerVirionPlan();
+        $lock = $plan->readJson($project . '/composer.lock');
+        $packages = $lock['packages'] ?? null;
+        self::assertIsArray($packages);
+        $package = $plan->object($packages[0] ?? null, 'fixture package');
+        $require = $plan->object($package['require'] ?? null, 'fixture requirements');
+        $require['pocketmine/pocketmine-mp'] = '^5.0';
+        $package['require'] = $require;
+        $packages[0] = $package;
+        $lock['packages'] = $packages;
+        $this->json($project . '/composer.lock', $lock);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('Runtime dependency pocketmine/pocketmine-mp is absent');
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
     }
 
     public function test_prepare_failure_preserves_existing_directory_and_cleans_staging(): void

@@ -4,7 +4,7 @@
 
 1. Use Axolotl-PM with the API declared by DevTools and its required PHP extensions. See the [verified runtime target](runtime-validation.md).
 2. Open the [latest GitHub release](https://github.com/NhanAZ/DevTools/releases/latest).
-3. Download [DevTools-1.0.0.phar](https://github.com/NhanAZ/DevTools/releases/download/v1.0.0/DevTools-1.0.0.phar) and compare its SHA-256 with the release checksum and recorded build provenance. GitHub's automatic "Source code" archives are not installable plugin artifacts.
+3. Download [DevTools-1.0.1.phar](https://github.com/NhanAZ/DevTools/releases/download/v1.0.1/DevTools-1.0.1.phar) and compare its SHA-256 with the release checksum and recorded build provenance. GitHub's automatic "Source code" archives are not installable plugin artifacts.
 4. Stop the server and copy the file to `plugins/DevTools.phar`.
 5. Start the server. DevTools creates server-root `virions/` and `build/` directories if they are missing.
 6. Run `/devtools status` as an operator and check that the displayed version matches the release.

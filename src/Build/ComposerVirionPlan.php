@@ -87,6 +87,13 @@ final class ComposerVirionPlan
             if (isset($result[$name])) {
                 continue;
             }
+            if ($name === 'pocketmine/pocketmine-mp') {
+                $server = $locked['axolotl-pm/pocketmine-mp'] ?? null;
+                $replacements = is_array($server) ? ($server['replace'] ?? null) : null;
+                if (is_array($replacements) && isset($replacements[$name])) {
+                    continue;
+                }
+            }
             $package = $locked[$name] ?? null;
             if ($package === null) {
                 throw new BuildException("Runtime dependency {$name} is absent from composer.lock packages. Run Composer install or update explicitly. Packages in require-dev, virtual packages and replacements are not bundled.");

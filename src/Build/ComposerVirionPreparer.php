@@ -99,12 +99,15 @@ final class ComposerVirionPreparer
                 });
                 $requirements = [];
                 foreach ($plan->dependencyNames($package['require'] ?? [], $name) as $dependency) {
+                    if ($dependency === 'pocketmine/pocketmine-mp' && !isset($packages[$dependency])) {
+                        continue;
+                    }
                     $requirements[] = ['name' => ComposerVirionPlan::localName($dependency), 'version' => $plan->version($packages[$dependency])];
                 }
                 $manifest = ['name' => $localName, 'version' => $plan->version($package), 'antigen' => $antigen, 'php' => ['8.1'], 'virions' => $requirements];
                 $platform = [];
                 foreach ($plan->object($package['require'] ?? [], $name) as $dependency => $constraint) {
-                    if (!str_contains($dependency, '/')) {
+                    if (!str_contains($dependency, '/') && !str_starts_with($dependency, 'composer-')) {
                         $platform[$dependency] = $constraint;
                     }
                 }

@@ -12,7 +12,7 @@ final class VirionPlatformRequirementsTest extends TestCase
 {
     public function test_current_php_and_available_extension_satisfy_bounded_composer_constraints(): void
     {
-        (new VirionPlatformRequirements())->validate(['php' => '^7.4 || >=8.1 <9.0', 'ext-json' => '*'], 'Example');
+        (new VirionPlatformRequirements())->validate(['php' => '^7.4 || >=8.1 <9.0', 'php-64bit' => '*', 'ext-json' => '*'], 'Example');
         $this->expectNotToPerformAssertions();
     }
 

@@ -2,11 +2,11 @@
 
 ## DevTools PHAR workflow
 
-- For CLI, dependency and release interfaces, read `docs/cli.md`, `docs/dependencies.md`, and `docs/github-actions.md` from the exact DevTools revision used. The references below select release 1.0.0.
+- For CLI, dependency and release interfaces, read `docs/cli.md`, `docs/dependencies.md`, and `docs/github-actions.md` from the exact DevTools revision used. The references below select release 1.0.1.
 - Use CLI `--json`, check the exit status and `success`, consume the returned artifact path and verify its SHA-256. Report runtime testing and static analysis separately from package validation.
 
 - Read `plugin.yml`, `devtools.yml`, Composer metadata, existing workflows, and referenced source before changing the build.
-- Use `NhanAZ/DevTools/.github/workflows/build-plugin.yml@v1.0.0` according to the versioned [GitHub Actions guide](https://github.com/NhanAZ/DevTools/blob/v1.0.0/docs/github-actions.md). Set its required `devtools-ref` to the full commit resolved from `v1.0.0` as documented in that guide. Use the step-level action only when explicit setup is required.
+- Use `NhanAZ/DevTools/.github/workflows/build-plugin.yml@v1.0.1` according to the versioned [GitHub Actions guide](https://github.com/NhanAZ/DevTools/blob/v1.0.1/docs/github-actions.md). Set its required `devtools-ref` to the full commit resolved from `v1.0.1` as documented in that guide. Use the step-level action only when explicit setup is required.
 - Run the PHAR workflow on `push`, `pull_request`, and `workflow_dispatch` with `contents: read` permission.
 - The reusable workflow owns the documented Node.js 24 compatible Axolotl-PM PHP setup. Use the step-level setup only when that workflow is selected.
 - Keep PHPStan off unless this repository explicitly enables it. When enabled, keep the requested level and analyze every selected server source independently through `phpstan-server`.

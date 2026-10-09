@@ -19,6 +19,10 @@ final class VirionPlatformRequirements
                 if (!$this->matchesPhp($constraint)) {
                     throw new VirionException("{$source} requires PHP {$constraint}. Current PHP is " . PHP_VERSION . '.');
                 }
+            } elseif ($name === 'php-64bit') {
+                if ($constraint !== '*' || PHP_INT_SIZE !== 8) {
+                    throw new VirionException("{$source} requires 64-bit PHP. Current PHP integer size is " . PHP_INT_SIZE . ' bytes.');
+                }
             } elseif (str_starts_with($name, 'ext-')) {
                 if ($constraint !== '*') {
                     throw new VirionException("{$source} uses unsupported versioned extension requirement {$name} {$constraint}. Only * is supported.");

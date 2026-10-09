@@ -36,4 +36,4 @@ Yes. DevTools uses filesystem APIs rather than shell-built commands. Portable ar
 
 ## Is there Vietnamese UI support?
 
-No. Version 1.0.0 uses English messages and documentation as the single supported language.
+No. DevTools uses English messages and documentation as the single supported language.
