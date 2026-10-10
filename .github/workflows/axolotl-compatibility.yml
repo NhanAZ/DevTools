@@ -57,7 +57,7 @@ jobs:
         uses: actions/checkout@v7.0.1
         with:
           repository: NhanAZ-Plugins/VisibleBorder
-          ref: 2ccbc4df06017659fa18761da6c4fec2e0093a29
+          ref: 558bd62cd4e815f13255357b38f105d36ee3c532
           path: compatibility/VisibleBorder
           persist-credentials: false
 
@@ -124,7 +124,7 @@ jobs:
           BUILD_METADATA: ${{ steps.build.outputs.metadata }}
         run: |
           set -euo pipefail
-          php compatibility/VisibleBorder/tools/verify-build.php "$PHAR_PATH" "$BUILD_METADATA" compatibility/VisibleBorder/virions/libRegRsp
+          php compatibility/VisibleBorder/tools/verify-build.php "$PHAR_PATH" "$BUILD_METADATA" compatibility/VisibleBorder/virions/libRegRsp 1.0.3
           mkdir -p compatibility/evidence
           cp "$BUILD_METADATA" compatibility/evidence/devtools-build.json
 
