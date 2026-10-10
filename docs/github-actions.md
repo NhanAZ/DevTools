@@ -2,10 +2,10 @@
 
 The composite action calls `bin/devtools.php build --json`, using the same builder as the CLI and server command. It verifies the reported PHAR SHA-256 and exposes the actual path from that result. PHPStan and Composer dependency preparation are opt-in. A successful build verifies packaging. It does not prove an Axolotl-PM runtime boot.
 
-These interfaces are available in `v1.0.3`. The composite action can use `NhanAZ/DevTools@v1.0.3` directly. Pin a reusable workflow to a reviewed full commit SHA. The workflow checks out its builder from that same commit using the current job's workflow identity. The deprecated `devtools-ref` input is accepted for existing callers but ignored, so a dependency update does not leave the builder at an older revision.
+These interfaces are available in `v1.0.4`. The composite action can use `NhanAZ/DevTools@v1.0.4` directly. Pin a reusable workflow to a reviewed full commit SHA. The workflow checks out its builder from that same commit using the current job's workflow identity. The deprecated `devtools-ref` input is accepted for existing callers but ignored, so a dependency update does not leave the builder at an older revision.
 
 ```sh
-git ls-remote https://github.com/NhanAZ/DevTools.git 'refs/tags/v1.0.3^{}'
+git ls-remote https://github.com/NhanAZ/DevTools.git 'refs/tags/v1.0.4^{}'
 ```
 
 Copy the first column (the annotated tag's commit) into `REVIEWED_DEVTOOLS_COMMIT_SHA` in each reusable workflow reference below. This keeps the dependency reference immutable and lets Dependabot recognize it. The caller's `github.sha` identifies the plugin, while the called job's workflow identity identifies DevTools. No release is performed merely by installing DevTools.
@@ -32,7 +32,7 @@ jobs:
 
 The reusable workflow checks out the plugin, sets up Axolotl-PM PHP using setup-helper commit `b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e`, checks out the selected DevTools revision, builds, inspects the PHAR and uploads one artifact containing the PHAR plus `build-metadata.json`. Find that artifact under **Actions -> workflow run -> Artifacts**. The metadata contains the tool version, plugin version, resolved dependency information, checks, and PHAR hash from the versioned [CLI contract](cli.md).
 
-Default `project: .` expects `plugin.yml` and `src/` at the repository root. A plugin without virions needs no Composer manifest or additional DevTools configuration. Local virions remain usable through `virions: virions`. The included `examples/.github/workflows/build.yml` uses the v1.0.3 composite action for `HelloShared` and `SharedGreeting`.
+Default `project: .` expects `plugin.yml` and `src/` at the repository root. A plugin without virions needs no Composer manifest or additional DevTools configuration. Local virions remain usable through `virions: virions`. The included `examples/.github/workflows/build.yml` uses the v1.0.4 composite action for `HelloShared` and `SharedGreeting`.
 
 ## Explicit Composer dependency preparation
 
@@ -54,7 +54,7 @@ Use the composite action when your repository needs extra checkouts or checks. S
 
 ```yaml
       - id: build
-        uses: NhanAZ/DevTools@v1.0.3
+        uses: NhanAZ/DevTools@v1.0.4
         with:
           project: .
           virions: virions
@@ -100,7 +100,7 @@ Check out the Axolotl-PM source, then pass its local path to the composite actio
           path: .devtools-server
           persist-credentials: false
       - id: build
-        uses: NhanAZ/DevTools@v1.0.3
+        uses: NhanAZ/DevTools@v1.0.4
         with:
           phpstan: '4'
           phpstan-server: .devtools-server

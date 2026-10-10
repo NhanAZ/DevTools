@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NhanAZ\DevTools\Build;
 
+use FilesystemIterator;
 use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\Path;
 use NhanAZ\DevTools\Support\PhpSourceInspector;
@@ -13,6 +14,9 @@ use NhanAZ\DevTools\Virion\VirionManifestReader;
 use NhanAZ\DevTools\Virion\VirionPlatformRequirements;
 use NhanAZ\DevTools\Virion\VirionProjectFactory;
 use NhanAZ\DevTools\Virion\VirionSourceFingerprint;
+use RecursiveDirectoryIterator;
+use RecursiveIteratorIterator;
+use SplFileInfo;
 
 final class ComposerVirionPreparer
 {
@@ -83,6 +87,15 @@ final class ComposerVirionPreparer
                 $antigen = $plan->antigen($package);
                 $sourceRelative = Path::normalizeRelative($plan->sourceDirectory($package));
                 $this->filesystem->assertNoSymbolicLinkComponents($source, $sourceRelative);
+                $autoload = $package['autoload'] ?? null;
+                if (is_array($autoload) && array_key_first($autoload) === 'classmap') {
+                    $classmap = $autoload['classmap'];
+                    if (!is_array($classmap) || array_keys($classmap) !== [0] || !is_string($classmap[0])) {
+                        throw new BuildException("Composer virion {$name} requires one classmap source directory.");
+                    }
+                    $classmapRoot = Path::normalizeRelative($classmap[0]);
+                    $this->assertClassmapSource($source, $classmapRoot, $sourceRelative, $name);
+                }
                 if (is_dir($source . '/resources')) {
                     throw new BuildException("Composer virion {$name} has root resources/. Only resources colocated under its PSR-4 source directory retain their relative paths when bundled.");
                 }
@@ -144,6 +157,35 @@ final class ComposerVirionPreparer
             $this->filesystem->removeTree($stage);
         }
         return $result;
+    }
+
+    private function assertClassmapSource(string $source, string $classmapRoot, string $sourceRelative, string $name): void
+    {
+        if (!str_starts_with($sourceRelative, $classmapRoot . '/')) {
+            throw new BuildException("Composer virion {$name} classmap source is outside its declared namespace tree.");
+        }
+        $this->filesystem->assertNoSymbolicLinkComponents($source, $classmapRoot);
+        $root = $source . '/' . $classmapRoot;
+        if (!is_dir($root)) {
+            throw new BuildException("Composer virion {$name} classmap root does not exist: {$classmapRoot}.");
+        }
+        $namespaceDirectory = substr($sourceRelative, strlen($classmapRoot) + 1) . '/';
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+        foreach ($iterator as $entry) {
+            if (!$entry instanceof SplFileInfo) {
+                continue;
+            }
+            if ($entry->isLink()) {
+                throw new BuildException("Composer virion {$name} classmap contains a symbolic link: {$entry->getPathname()}.");
+            }
+            if (!$entry->isFile() || !str_ends_with(strtolower($entry->getFilename()), '.php')) {
+                continue;
+            }
+            $relative = str_replace('\\', '/', substr($entry->getPathname(), strlen($root) + 1));
+            if (!str_starts_with($relative, $namespaceDirectory)) {
+                throw new BuildException("Composer virion {$name} classmap PHP source is outside {$sourceRelative}: {$relative}.");
+            }
+        }
     }
 
     private function write(string $path, string $contents): void

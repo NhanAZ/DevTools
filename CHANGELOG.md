@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4 - 2026-10-11
+
+- Prepare locked Composer virions whose PSR-4 or namespace-based PSR-0 mapping uses a one-element directory array.
+- Prepare single-root classmap packages only when their PHP source stays inside the declared namespace tree and passes the existing class-layout validation.
+- Keep root plugin classmaps, multiple package roots, dynamic class references during shading and unverified dependency source changes rejected.
+
 ## 1.0.3 - 2026-10-10
 
 - Check out the build and release verification tools from the exact commit that defines each reusable workflow job.

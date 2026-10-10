@@ -191,15 +191,28 @@ final class ComposerVirionPlan
         $antigen = $this->antigen($package);
         $autoload = $package['autoload'] ?? null;
         if (!is_array($autoload) || count($autoload) !== 1) {
-            throw new BuildException("Composer virion {$antigen} requires one PSR-4 or namespace-based PSR-0 mapping. files, classmap and multiple roots are unsupported.");
+            throw new BuildException("Composer virion {$antigen} requires one PSR-4, namespace-based PSR-0, or classmap mapping. files and multiple roots are unsupported.");
         }
         $kind = array_key_first($autoload);
         $mapping = $autoload[$kind];
-        if (!in_array($kind, ['psr-4', 'psr-0'], true) || !is_array($mapping)
-            || array_keys($mapping) !== [$antigen . '\\'] || !is_string($mapping[$antigen . '\\'])) {
-            throw new BuildException("Composer virion {$antigen} requires one PSR-4 or namespace-based PSR-0 mapping from {$antigen}\\ to one directory. files, classmap and multiple roots are unsupported.");
+        if ($kind === 'classmap' && is_array($mapping) && array_keys($mapping) === [0] && is_string($mapping[0])) {
+            return rtrim($mapping[0], '/\\') . '/' . str_replace('\\', '/', $antigen);
         }
-        return rtrim($mapping[$antigen . '\\'], '/\\') . ($kind === 'psr-0' ? '/' . str_replace('\\', '/', $antigen) : '');
+        if (!in_array($kind, ['psr-4', 'psr-0'], true)) {
+            throw new BuildException("Composer virion {$antigen} requires one PSR-4, namespace-based PSR-0, or classmap mapping. files and multiple roots are unsupported.");
+        }
+        if (!is_array($mapping)
+            || array_keys($mapping) !== [$antigen . '\\']) {
+            throw new BuildException("Composer virion {$antigen} requires one namespace mapping from {$antigen}\\ to one directory.");
+        }
+        $root = $mapping[$antigen . '\\'];
+        if (is_array($root) && array_keys($root) === [0]) {
+            $root = $root[0];
+        }
+        if (!is_string($root)) {
+            throw new BuildException("Composer virion {$antigen} requires one source directory. Multiple autoload roots are unsupported.");
+        }
+        return rtrim($root, '/\\') . ($kind === 'psr-0' ? '/' . str_replace('\\', '/', $antigen) : '');
     }
 
     /** @return array<string, mixed> */

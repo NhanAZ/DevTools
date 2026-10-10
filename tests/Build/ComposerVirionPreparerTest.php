@@ -175,7 +175,38 @@ final class ComposerVirionPreparerTest extends TestCase
     {
         $project = $this->project(['files' => ['bootstrap.php']]);
         $this->expectException(BuildException::class);
-        $this->expectExceptionMessage('files, classmap and multiple roots');
+        $this->expectExceptionMessage('files and multiple roots');
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+    }
+
+    public function test_single_psr4_root_in_composer_array_is_prepared_and_built(): void
+    {
+        $project = $this->project(['psr-4' => ['Example\\LibraryA\\' => ['src/']]]);
+        $destination = $this->temporaryDirectory . '/prepared';
+        self::assertCount(2, (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination));
+        self::assertCount(2, $this->builder()->build($project, $destination, $project . '/build')->dependencies);
+    }
+
+    public function test_single_classmap_root_with_namespace_tree_is_prepared_and_built(): void
+    {
+        $project = $this->project(['classmap' => ['src/']]);
+        $target = $project . '/vendor/example/a/src/Example/LibraryA/Greeting.php';
+        $this->filesystem->ensureDirectory(dirname($target));
+        self::assertTrue(rename($project . '/vendor/example/a/src/Greeting.php', $target));
+        $destination = $this->temporaryDirectory . '/prepared';
+        self::assertCount(2, (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination));
+        self::assertCount(2, $this->builder()->build($project, $destination, $project . '/build')->dependencies);
+    }
+
+    public function test_classmap_source_outside_namespace_tree_is_rejected(): void
+    {
+        $project = $this->project(['classmap' => ['src/']]);
+        $target = $project . '/vendor/example/a/src/Example/LibraryA/Greeting.php';
+        $this->filesystem->ensureDirectory(dirname($target));
+        self::assertTrue(rename($project . '/vendor/example/a/src/Greeting.php', $target));
+        file_put_contents($project . '/vendor/example/a/src/Extra.php', '<?php final class Extra {}');
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('classmap PHP source is outside');
         (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
     }
 
