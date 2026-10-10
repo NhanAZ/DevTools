@@ -54,7 +54,7 @@ jobs:
 
       - name: Check out representative consumer
         if: steps.release.outputs.candidate == 'true'
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: NhanAZ-Plugins/VisibleBorder
           ref: 558bd62cd4e815f13255357b38f105d36ee3c532
@@ -63,7 +63,7 @@ jobs:
 
       - name: Check out pinned libRegRsp
         if: steps.release.outputs.candidate == 'true'
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: NhanAZ-Libraries/libRegRsp
           ref: 04766ae683a1ba63ed297730f7f2e8628aac3666
@@ -72,7 +72,7 @@ jobs:
 
       - name: Check out candidate Axolotl-PM source
         if: steps.release.outputs.candidate == 'true'
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: axolotl-pm/PocketMine-MP
           ref: ${{ steps.release.outputs.sha }}
@@ -81,7 +81,7 @@ jobs:
 
       - name: Check out Axolotl-PM PHP setup helper
         if: steps.release.outputs.candidate == 'true'
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: axolotl-pm/setup-php-action
           ref: b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e
@@ -223,7 +223,7 @@ jobs:
 
       - name: Upload compatibility evidence
         if: always() && steps.release.outputs.candidate == 'true'
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: axolotl-${{ steps.release.outputs.tag }}-visibleborder
           path: |
