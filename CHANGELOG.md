@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.5 - 2026-10-11
+
+- Permit explicitly annotated, guarded runtime class factories after `class_exists()` and `is_subclass_of()` prove the selected class is a supported implementation.
+- Permit explicitly annotated object-class inspection such as `$callback::class` while continuing to reject unproven dynamic class references and operations.
+- Add regression coverage and document the annotation contract for consumers that use safe runtime class selection.
+
 ## 1.0.4 - 2026-10-11
 
 - Prepare locked Composer virions whose PSR-4 or namespace-based PSR-0 mapping uses a one-element directory array.

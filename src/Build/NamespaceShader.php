@@ -84,6 +84,7 @@ final class NamespaceShader
                     throw new BuildException("The parser returned no statements for {$entry->getPathname()}.");
                 }
                 $traverser = new NodeTraverser();
+                $traverser->addVisitor(new ParentConnectingVisitor());
                 $traverser->addVisitor(new NameResolver(null, ['replaceNodes' => false, 'preserveOriginalNames' => true]));
                 $traverser->addVisitor(new NamespaceReferenceGuardVisitor($namespaces));
                 $traverser->traverse($statements);

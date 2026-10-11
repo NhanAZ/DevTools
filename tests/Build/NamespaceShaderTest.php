@@ -96,4 +96,111 @@ PHP;
 
         (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
     }
+
+    public function test_annotated_guarded_environment_driver_is_allowed(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Factory.php';
+        file_put_contents(
+            $path,
+            <<<'PHP'
+<?php
+namespace Fixture;
+
+use Shared\Virion\Driver;
+use function class_exists;
+use function getenv;
+use function is_subclass_of;
+
+final class Factory
+{
+    /** @devtools-allow-dynamic-class $driver */
+    public function create(): object
+    {
+        $driver = getenv('DRIVER');
+        if (!class_exists($driver)) {
+            throw new \Error('missing');
+        }
+        if (!is_subclass_of($driver, Driver::class)) {
+            throw new \Error('invalid');
+        }
+
+        return new $driver();
+    }
+}
+PHP,
+        );
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('Fixture\Shade\Shared\Driver::class', $result);
+    }
+
+    public function test_annotated_dynamic_class_without_guards_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents(
+            $directory . DIRECTORY_SEPARATOR . 'Unsafe.php',
+            <<<'PHP'
+<?php
+final class Unsafe
+{
+    /** @devtools-allow-dynamic-class $className */
+    public function create(): object
+    {
+        $className = getenv('CLASS_NAME');
+
+        return new $className();
+    }
+}
+PHP,
+        );
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
+    public function test_annotated_dynamic_class_match_is_allowed(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Matcher.php';
+        file_put_contents(
+            $path,
+            <<<'PHP'
+<?php
+namespace Fixture;
+
+use Shared\Virion\Callback;
+
+final class Matcher
+{
+    /** @devtools-allow-dynamic-class $callback */
+    public function type(object $callback): int
+    {
+        return match ($callback::class) {
+            Callback::class => 1,
+            default => 0,
+        };
+    }
+}
+PHP,
+        );
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('Fixture\Shade\Shared\Callback::class', $result);
+    }
 }

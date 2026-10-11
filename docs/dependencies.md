@@ -60,7 +60,7 @@ Shared development loading registers one selected namespace and version in the s
 
 A build shades the complete selected graph into the plugin's private namespace. Separate plugins can bundle separate versions, but their library types are distinct and static state is separate. Do not exchange objects of a privately bundled library as a cross-plugin API. Define that API in an intentionally external plugin dependency instead. There is no public or shared namespace contract for bundled virions.
 
-Namespaces and supported static PHP class references are rewritten by the existing AST shader. Dynamic class strings, dynamically selected class operations and other unprovable cases remain errors. Successful preparation therefore does **not** guarantee that a package passes shading or boots on Axolotl-PM. Async worker behavior must be checked separately on the pinned server runtime. Ordinary PHP unit execution is not that check.
+Namespaces and supported static PHP class references are rewritten by the existing AST shader. Dynamic class strings, dynamically selected class operations and other unprovable cases remain errors. A narrowly annotated runtime factory can be accepted when it validates the selected class with `class_exists()` and `is_subclass_of()` before instantiation; the annotation and validation sequence are both required. Successful preparation therefore does **not** guarantee that a package passes shading or boots on Axolotl-PM. Async worker behavior must be checked separately on the pinned server runtime. Ordinary PHP unit execution is not that check.
 
 ## Compatibility limits
 

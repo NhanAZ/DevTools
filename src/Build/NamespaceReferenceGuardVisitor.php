@@ -45,6 +45,12 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
         if (($node instanceof New_ || $node instanceof Instanceof_ || $node instanceof StaticCall
             || $node instanceof StaticPropertyFetch || $node instanceof ClassConstFetch)
             && $node->class instanceof Expr) {
+            if ($node instanceof ClassConstFetch && DynamicClassReferencePolicy::allowsObjectClass($node)) {
+                return null;
+            }
+            if ($node instanceof New_ && DynamicClassReferencePolicy::allowsGuarded($node, $node->class)) {
+                return null;
+            }
             throw new BuildException(
                 "Cannot prove that a dynamic class reference on line {$node->getStartLine()} is independent of an undeclared virion.",
             );
@@ -60,7 +66,9 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
             };
             foreach ($arguments as $argument) {
                 if (isset($node->args[$argument]) && $node->args[$argument] instanceof Arg
-                    && !$this->isStaticClassExpression($node->args[$argument]->value)) {
+                    && !$this->isStaticClassExpression($node->args[$argument]->value)
+                    && !($function === 'class_exists'
+                        && DynamicClassReferencePolicy::allowsAnnotated($node, $node->args[$argument]->value))) {
                     throw new BuildException(
                         "Cannot prove that dynamic class-name argument to {$function}() on line {$node->getStartLine()} is independent of an undeclared virion.",
                     );

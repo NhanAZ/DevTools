@@ -68,6 +68,12 @@ final class NamespaceRewriteVisitor extends NodeVisitorAbstract
         if (($node instanceof New_ || $node instanceof Instanceof_ || $node instanceof StaticCall
             || $node instanceof StaticPropertyFetch || $node instanceof ClassConstFetch)
             && $node->class instanceof Expr) {
+            if ($node instanceof ClassConstFetch && DynamicClassReferencePolicy::allowsObjectClass($node)) {
+                return null;
+            }
+            if ($node instanceof New_ && DynamicClassReferencePolicy::allowsGuarded($node, $node->class)) {
+                return null;
+            }
             throw new BuildException(
                 "Cannot safely shade a dynamic class reference on line {$node->getStartLine()}. Use a static class name or ::class reference.",
             );
@@ -83,7 +89,9 @@ final class NamespaceRewriteVisitor extends NodeVisitorAbstract
             };
             foreach ($arguments as $argument) {
                 if (isset($node->args[$argument]) && $node->args[$argument] instanceof Arg
-                    && !$this->isStaticClassExpression($node->args[$argument]->value)) {
+                    && !$this->isStaticClassExpression($node->args[$argument]->value)
+                    && !($function === 'class_exists'
+                        && DynamicClassReferencePolicy::allowsAnnotated($node, $node->args[$argument]->value))) {
                     throw new BuildException(
                         "Cannot safely shade dynamic class-name argument to {$function}() on line {$node->getStartLine()}.",
                     );
