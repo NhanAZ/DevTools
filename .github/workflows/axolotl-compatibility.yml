@@ -108,7 +108,7 @@ jobs:
       - name: Build and analyze representative PHAR
         if: steps.release.outputs.candidate == 'true'
         id: build
-        uses: NhanAZ/DevTools@07f2c1ed569bbd2aae31222e4991da1cdeb8af6f # v1.0.4
+        uses: NhanAZ/DevTools@85f0ee8363e7e2609e7b88f1fdac186927435371 # v1.0.5
         with:
           project: compatibility/VisibleBorder
           virions: compatibility/VisibleBorder/virions
@@ -124,7 +124,7 @@ jobs:
           BUILD_METADATA: ${{ steps.build.outputs.metadata }}
         run: |
           set -euo pipefail
-          php compatibility/VisibleBorder/tools/verify-build.php "$PHAR_PATH" "$BUILD_METADATA" compatibility/VisibleBorder/virions/libRegRsp 1.0.4
+          php compatibility/VisibleBorder/tools/verify-build.php "$PHAR_PATH" "$BUILD_METADATA" compatibility/VisibleBorder/virions/libRegRsp 1.0.5
           mkdir -p compatibility/evidence
           cp "$BUILD_METADATA" compatibility/evidence/devtools-build.json
 
