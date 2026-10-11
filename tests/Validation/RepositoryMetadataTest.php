@@ -109,6 +109,20 @@ final class RepositoryMetadataTest extends TestCase
         }
     }
 
+    public function test_compatibility_monitor_checks_the_pinned_builder_version(): void
+    {
+        $workflow = file_get_contents(dirname(__DIR__, 2) . '/.github/workflows/axolotl-compatibility.yml');
+        self::assertIsString($workflow);
+        self::assertIsArray(yaml_parse($workflow));
+
+        self::assertSame(1, preg_match('/uses: NhanAZ\\/DevTools@[a-f0-9]{40} # v([0-9]+\\.[0-9]+\\.[0-9]+)/', $workflow, $pin));
+        self::assertSame(1, preg_match('/verify-build\\.php[^\\r\\n]*libRegRsp ([0-9]+\\.[0-9]+\\.[0-9]+)/', $workflow, $verifier));
+        if (!isset($pin[1], $verifier[1])) {
+            self::fail('Compatibility monitor must declare both builder versions.');
+        }
+        self::assertSame($pin[1], $verifier[1]);
+    }
+
     public function test_composite_action_and_per_commit_example_are_valid(): void
     {
         $root = dirname(__DIR__, 2);
