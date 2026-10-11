@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9 - 2026-10-11
+
+- Require annotated runtime class factories to have two unconditional throwing guards immediately before a direct return of the new object.
+- Reject unreachable checks and a class name reassigned after validation. The previous scan could mistake either case for a safe shaded factory.
+- Keep the existing explicitly guarded factory pattern and reject unproven dynamic class operations.
+
 ## 1.0.8 - 2026-10-11
 
 - Prepare Composer virions from `dev-` branches only when `composer.lock` pins a full Git commit and source and distribution references agree. Give each prepared revision a distinct internal version and keep the original Composer version in provenance.

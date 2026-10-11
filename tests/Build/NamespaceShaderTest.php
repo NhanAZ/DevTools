@@ -158,6 +158,72 @@ final class Unsafe
 
         return new $className();
     }
+
+}
+PHP,
+        );
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
+    public function test_annotated_dynamic_class_with_unreachable_guards_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents(
+            $directory . DIRECTORY_SEPARATOR . 'Unsafe.php',
+            <<<'PHP'
+<?php
+namespace Fixture;
+use Shared\Virion\Driver;
+final class Unsafe
+{
+    /** @devtools-allow-dynamic-class $driver */
+    public function create(string $driver): object
+    {
+        if (false) {
+            class_exists($driver);
+            is_subclass_of($driver, Driver::class);
+        }
+        return new $driver();
+    }
+}
+PHP,
+        );
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
+    public function test_annotated_dynamic_class_with_reassigned_name_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents(
+            $directory . DIRECTORY_SEPARATOR . 'Unsafe.php',
+            <<<'PHP'
+<?php
+namespace Fixture;
+use Shared\Virion\Driver;
+final class Unsafe
+{
+    /** @devtools-allow-dynamic-class $driver */
+    public function create(string $driver): object
+    {
+        if (!class_exists($driver)) {
+            throw new \Error('missing');
+        }
+        if (!is_subclass_of($driver, Driver::class)) {
+            throw new \Error('invalid');
+        }
+        $driver = getenv('UNVALIDATED_DRIVER');
+        return new $driver();
+    }
 }
 PHP,
         );

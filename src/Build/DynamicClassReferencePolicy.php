@@ -12,6 +12,7 @@ use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Expr\BinaryOp\BooleanOr;
+use PhpParser\Node\Expr\BooleanNot;
 use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\Instanceof_;
@@ -21,9 +22,8 @@ use PhpParser\Node\FunctionLike;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PhpParser\Node\Stmt\Expression as ExpressionStatement;
+use PhpParser\Node\Stmt\If_;
 use PhpParser\Node\Stmt\Return_;
-use PhpParser\NodeTraverser;
-use PhpParser\NodeVisitorAbstract;
 
 use function str_contains;
 use function strtolower;
@@ -64,65 +64,46 @@ final class DynamicClassReferencePolicy
             return false;
         }
 
-        $visitor = new class ($node, $variable) extends NodeVisitorAbstract {
-            private bool $classExistsChecked = false;
+        $parent = $node->getAttribute('parent');
+        if (!$parent instanceof Return_ || $parent->expr !== $node) {
+            return false;
+        }
 
-            private bool $subclassChecked = false;
+        $statements = $function->getStmts() ?? [];
+        $index = array_search($parent, $statements, true);
+        return is_int($index)
+            && $index >= 2
+            && self::isThrowingGuard($statements[$index - 2], 'class_exists', $variable)
+            && self::isThrowingGuard($statements[$index - 1], 'is_subclass_of', $variable);
+    }
 
-            public function __construct(
-                private readonly Node $target,
-                private readonly string $variable,
-            ) {}
+    private static function isThrowingGuard(Node $statement, string $function, string $variable): bool
+    {
+        if (!$statement instanceof If_ || $statement->else !== null || $statement->elseifs !== []
+            || count($statement->stmts) !== 1
+            || !$statement->stmts[0] instanceof ExpressionStatement
+            || !$statement->stmts[0]->expr instanceof Throw_
+            || !$statement->cond instanceof BooleanNot
+            || !$statement->cond->expr instanceof FuncCall) {
+            return false;
+        }
 
-            public function isGuarded(): bool
-            {
-                return $this->classExistsChecked && $this->subclassChecked;
-            }
+        $call = $statement->cond->expr;
+        $name = $call->name;
+        if (!$name instanceof Name
+            || strtolower(ltrim($name->toString(), '\\')) !== $function
+            || !isset($call->args[0]) || !$call->args[0] instanceof Arg
+            || !$call->args[0]->value instanceof Variable
+            || $call->args[0]->value->name !== $variable) {
+            return false;
+        }
 
-            public function enterNode(Node $node): ?int
-            {
-                if ($node === $this->target) {
-                    return self::STOP_TRAVERSAL;
-                }
-
-                if (!$node instanceof FuncCall || !$node->name instanceof Name) {
-                    return null;
-                }
-
-                $function = strtolower(ltrim($node->name->toString(), '\\'));
-                if ($function === 'class_exists' && $this->hasVariableArgument($node, 0)) {
-                    $this->classExistsChecked = true;
-                }
-                if ($function === 'is_subclass_of'
-                    && $this->hasVariableArgument($node, 0)
-                    && isset($node->args[1])
-                    && $node->args[1] instanceof Arg
-                    && $this->isStaticClassExpression($node->args[1]->value)) {
-                    $this->subclassChecked = true;
-                }
-
-                return null;
-            }
-
-            private function hasVariableArgument(FuncCall $call, int $index): bool
-            {
-                return isset($call->args[$index])
-                    && $call->args[$index] instanceof Arg
-                    && $call->args[$index]->value instanceof Variable
-                    && $call->args[$index]->value->name === $this->variable;
-            }
-
-            private function isStaticClassExpression(Expr $expression): bool
-            {
-                return $expression instanceof ClassConstFetch && $expression->class instanceof Name;
-            }
-        };
-
-        $traverser = new NodeTraverser();
-        $traverser->addVisitor($visitor);
-        $traverser->traverse($function->getStmts() ?? []);
-
-        return $visitor->isGuarded();
+        if ($function === 'is_subclass_of') {
+            return isset($call->args[1]) && $call->args[1] instanceof Arg
+                && $call->args[1]->value instanceof ClassConstFetch
+                && $call->args[1]->value->class instanceof Name;
+        }
+        return true;
     }
 
     public static function allowsObjectClass(Node $node): bool
