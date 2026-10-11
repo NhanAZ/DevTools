@@ -108,7 +108,7 @@ jobs:
       - name: Build and analyze representative PHAR
         if: steps.release.outputs.candidate == 'true'
         id: build
-        uses: NhanAZ/DevTools@d285a77665a487146cca4bfa2cdc4616c19bc173 # v1.0.9
+        uses: NhanAZ/DevTools@f89c929de25ea5e45418b8caeb688db77d97c2f6 # v1.0.10
         with:
           project: compatibility/VisibleBorder
           virions: compatibility/VisibleBorder/virions
