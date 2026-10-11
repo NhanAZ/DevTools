@@ -110,6 +110,7 @@ final class ComposerVirionPreparer
                     }
                     return !Path::isHiddenOrTemporary($relative);
                 });
+                $autoloadShims = $this->createCoLocatedClassShims($target . '/src', $antigen, $name);
                 $requirements = [];
                 foreach ($plan->dependencyNames($package['require'] ?? [], $name) as $dependency) {
                     if ($dependency === 'pocketmine/pocketmine-mp' && !isset($packages[$dependency])) {
@@ -132,7 +133,7 @@ final class ComposerVirionPreparer
                         $this->filesystem->copyFile($source . '/' . $license, $target . '/' . $license);
                     }
                 }
-                $metadata = ['package' => $name, 'name' => $localName, 'version' => $manifest['version'], 'composerVersion' => $package['version'], 'antigen' => $antigen, 'source' => $package['source'] ?? null, 'dist' => $package['dist'] ?? null, 'composerLockSha256' => hash_file('sha256', $projectRoot . '/composer.lock')];
+                $metadata = ['package' => $name, 'name' => $localName, 'version' => $manifest['version'], 'composerVersion' => $package['version'], 'antigen' => $antigen, 'source' => $package['source'] ?? null, 'dist' => $package['dist'] ?? null, 'composerLockSha256' => hash_file('sha256', $projectRoot . '/composer.lock'), 'autoloadShims' => $autoloadShims];
                 $metadata['sourceSha256'] = (new VirionSourceFingerprint())->hash($target . '/src');
                 $metadata['manifestSha256'] = hash_file('sha256', $target . '/virion.yml');
                 $metadata['composerPackageSha256'] = $plan->fingerprint($package);
@@ -157,6 +158,51 @@ final class ComposerVirionPreparer
             $this->filesystem->removeTree($stage);
         }
         return $result;
+    }
+
+    /** @return array<string, string> */
+    private function createCoLocatedClassShims(string $root, string $antigen, string $package): array
+    {
+        $inspector = new PhpSourceInspector();
+        $declarations = [];
+        $files = [];
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+        foreach ($iterator as $entry) {
+            if (!$entry instanceof SplFileInfo || !$entry->isFile() || !str_ends_with(strtolower($entry->getFilename()), '.php')) {
+                continue;
+            }
+            $relative = str_replace('\\', '/', substr($entry->getPathname(), strlen($root) + 1));
+            $files[$relative] = $inspector->inspect($entry->getPathname())->classes;
+            foreach ($files[$relative] as $class) {
+                $key = strtolower($class);
+                if (isset($declarations[$key])) {
+                    throw new BuildException("Composer virion {$package} declares {$class} in both {$declarations[$key]} and {$relative}.");
+                }
+                $declarations[$key] = $relative;
+            }
+        }
+        ksort($files, SORT_STRING);
+        $shims = [];
+        foreach ($files as $relative => $classes) {
+            $primary = $antigen . '\\' . str_replace('/', '\\', substr($relative, 0, -4));
+            if (!in_array($primary, $classes, true)) {
+                continue;
+            }
+            foreach ($classes as $class) {
+                if ($class === $primary || !str_starts_with($class, $antigen . '\\')) {
+                    continue;
+                }
+                $expected = str_replace('\\', '/', substr($class, strlen($antigen) + 1)) . '.php';
+                if (dirname($expected) !== dirname($relative) || file_exists($root . '/' . $expected)) {
+                    continue;
+                }
+                $origin = basename($relative);
+                $this->write($root . '/' . $expected, "<?php\n\ndeclare(strict_types=1);\n\nrequire_once __DIR__ . '/' . " . var_export($origin, true) . ";\n");
+                $shims[$expected] = $relative;
+            }
+        }
+        ksort($shims, SORT_STRING);
+        return $shims;
     }
 
     private function assertClassmapSource(string $source, string $classmapRoot, string $sourceRelative, string $name): void

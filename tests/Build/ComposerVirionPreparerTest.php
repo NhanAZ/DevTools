@@ -73,6 +73,41 @@ final class ComposerVirionPreparerTest extends TestCase
         self::assertCount(2, $this->builder()->build($project, $this->temporaryDirectory . '/prepared', $project . '/build')->dependencies);
     }
 
+    public function test_co_located_interface_gets_a_recorded_autoload_shim(): void
+    {
+        $project = $this->project();
+        file_put_contents(
+            $project . '/vendor/example/a/src/Helper.php',
+            '<?php namespace Example\\LibraryA; interface HelperInterface {} final class Helper implements HelperInterface {}',
+        );
+        $destination = $this->temporaryDirectory . '/prepared';
+        $metadata = (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+        $shim = $destination . '/example.a/src/HelperInterface.php';
+        self::assertSame(['HelperInterface.php' => 'Helper.php'], $metadata[0]['autoloadShims']);
+        self::assertStringContainsString("require_once __DIR__ . '/' . 'Helper.php';", (string) file_get_contents($shim));
+        $result = $this->builder()->build($project, $destination, $project . '/build');
+        $phar = new Phar($result->outputPath);
+        $shaded = str_replace('Fixture/Build/', '', str_replace('\\', '/', $result->shadedVirions['Example\\LibraryA']));
+        self::assertTrue(isset($phar['src/' . $shaded . '/HelperInterface.php']));
+        self::assertTrue(isset($phar['src/' . $shaded . '/Helper.php']));
+    }
+
+    public function test_misnamed_standalone_class_is_not_auto_shimmed(): void
+    {
+        $project = $this->project();
+        file_put_contents($project . '/vendor/example/a/src/Wrong.php', '<?php namespace Example\\LibraryA; final class Other {}');
+        $this->expectExceptionMessage('expected source file');
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+    }
+
+    public function test_duplicate_class_with_different_case_is_rejected(): void
+    {
+        $project = $this->project();
+        file_put_contents($project . '/vendor/example/a/src/Other.php', '<?php namespace Example\\LibraryA; final class greeting {}');
+        $this->expectExceptionMessage('declares Example\\LibraryA\\greeting in both');
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+    }
+
     public function test_transitive_pocketmine_requirement_without_axolotl_replacement_fails(): void
     {
         $project = $this->project();

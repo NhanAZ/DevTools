@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.10 - 2026-10-11
+
+- Prepare locked Composer virions when a PHP file declares its matching class and additional classes in the same namespace and directory. Generate a small autoload shim for each additional class and record the mapping in provenance.
+- Keep standalone classes with incorrect paths rejected, detect duplicate class declarations regardless of letter case, and retain the existing dynamic class shading guard.
+
 ## 1.0.9 - 2026-10-11
 
 - Require annotated runtime class factories to have two unconditional throwing guards immediately before a direct return of the new object.
