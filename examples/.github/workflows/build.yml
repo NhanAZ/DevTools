@@ -39,7 +39,7 @@ jobs:
 
       - name: Build standalone plugin PHAR
         id: build
-        uses: NhanAZ/DevTools@v1.0.6
+        uses: NhanAZ/DevTools@v1.0.7
         with:
           project: HelloShared
           virions: .

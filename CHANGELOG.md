@@ -1,8 +1,13 @@
 # Changelog
 
+## 1.0.7 - 2026-10-11
+
+- Require an unannotated object-class return to follow a top-level `instanceof ... || throw ...` guard immediately in the same function.
+- Reject guards inside optional branches and guards invalidated by an intervening assignment. Keep the explicit annotation path and other 1.0.6 dependency preparation behavior.
+
 ## 1.0.6 - 2026-10-11
 
-- Allow an object-class expression after an explicit `instanceof ... || throw ...` guard proves the runtime object type.
+- Initially allow an object-class expression after an explicit `instanceof ... || throw ...` guard; version 1.0.7 tightens the control-flow requirement.
 - Add a regression test for guarded object-class inspection without weakening rejection of unproven dynamic class operations.
 
 ## 1.0.5 - 2026-10-11

@@ -219,7 +219,7 @@ use Shared\Virion\Graphic;
 
 final class Translator
 {
-    public function describe(object $graphic): string
+    public function describe(mixed $graphic): string
     {
         $graphic instanceof Graphic || throw new \InvalidArgumentException();
 
@@ -237,5 +237,54 @@ PHP,
         self::assertIsString($result);
         self::assertStringContainsString('Fixture\Shade\Shared\Graphic', $result);
         self::assertStringContainsString('$graphic::class', $result);
+    }
+
+    public function test_conditional_object_guard_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'Conditional.php', <<<'PHP'
+<?php
+namespace Fixture;
+use Shared\Virion\Graphic;
+final class Conditional
+{
+    public function describe(bool $check, mixed $graphic): string
+    {
+        if ($check) {
+            $graphic instanceof Graphic || throw new \InvalidArgumentException();
+        }
+        return $graphic::class;
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
+    public function test_object_guard_invalidated_by_reassignment_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'Reassigned.php', <<<'PHP'
+<?php
+namespace Fixture;
+use Shared\Virion\Graphic;
+final class Reassigned
+{
+    public function describe(mixed $graphic): string
+    {
+        $graphic instanceof Graphic || throw new \InvalidArgumentException();
+        $graphic = Graphic::class;
+        return $graphic::class;
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
     }
 }

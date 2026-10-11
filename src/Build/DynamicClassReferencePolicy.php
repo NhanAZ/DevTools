@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NhanAZ\DevTools\Build;
 
+use function array_search;
 use function is_string;
 use function ltrim;
 
@@ -19,6 +20,8 @@ use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\FunctionLike;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use PhpParser\Node\Stmt\Expression as ExpressionStatement;
+use PhpParser\Node\Stmt\Return_;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
 
@@ -138,47 +141,28 @@ final class DynamicClassReferencePolicy
     private static function hasGuardedObjectClass(Node $node, Variable $class): bool
     {
         $function = self::enclosingFunction($node);
-        if ($function === null) {
+        $parent = $node->getAttribute('parent');
+        if ($function === null || !$parent instanceof Return_ || $parent->expr !== $node) {
             return false;
         }
 
-        $visitor = new class ($node, $class) extends NodeVisitorAbstract {
-            private bool $guarded = false;
+        $statements = $function->getStmts() ?? [];
+        $index = array_search($parent, $statements, true);
+        if (!is_int($index) || $index === 0) {
+            return false;
+        }
 
-            public function __construct(
-                private readonly Node $target,
-                private readonly Variable $class,
-            ) {}
+        $previous = $statements[$index - 1];
+        if (!$previous instanceof ExpressionStatement || !$previous->expr instanceof BooleanOr) {
+            return false;
+        }
 
-            public function isGuarded(): bool
-            {
-                return $this->guarded;
-            }
-
-            public function enterNode(Node $node): ?int
-            {
-                if ($node === $this->target) {
-                    return self::STOP_TRAVERSAL;
-                }
-
-                if ($node instanceof BooleanOr
-                    && $node->left instanceof Instanceof_
-                    && $node->right instanceof Throw_
-                    && $node->left->expr instanceof Variable
-                    && $node->left->expr->name === $this->class->name
-                    && $node->left->class instanceof Name) {
-                    $this->guarded = true;
-                }
-
-                return null;
-            }
-        };
-
-        $traverser = new NodeTraverser();
-        $traverser->addVisitor($visitor);
-        $traverser->traverse($function->getStmts() ?? []);
-
-        return $visitor->isGuarded();
+        $guard = $previous->expr;
+        return $guard->left instanceof Instanceof_
+            && $guard->right instanceof Throw_
+            && $guard->left->expr instanceof Variable
+            && $guard->left->expr->name === $class->name
+            && $guard->left->class instanceof Name;
     }
 
     private static function variableName(Expr $class): ?string
