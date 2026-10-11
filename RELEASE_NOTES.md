@@ -7,6 +7,7 @@ DevTools loads folder plugins and shared development virions on Axolotl-PM and b
 - Require an unannotated `return $object::class` to follow a top-level `instanceof ... || throw ...` guard immediately in the same function.
 - Reject guards inside optional branches and guards invalidated by an intervening assignment. Version 1.0.6 accepted those shapes even though they did not prove the runtime value was an object.
 - Preserve the explicit annotation path and the Composer virion preparation behavior introduced in earlier releases.
+- Read the Axolotl-PM smoke target from the committed Composer lock and update the runtime reproduction guide to the current 5.49.1 source pin.
 
 Root plugin classmaps and multiple package roots remain unsupported. DevTools also continues to reject dynamic class references it cannot prove safe to shade. A package passing preparation is not proof that its plugin will build or run.
 

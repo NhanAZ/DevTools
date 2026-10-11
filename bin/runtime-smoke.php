@@ -94,8 +94,25 @@ try {
     if ($reference === null || $installed === null) {
         throw new RuntimeException('Install DevTools development dependencies from composer.lock first.');
     }
-    if ($reference !== 'b9a3b244993fb8a6df97241f3a3fbe44e2076f4c') {
-        throw new RuntimeException('Runtime smoke target changed. Review the Axolotl-PM pin and runtime documentation before updating this harness.');
+    $lock = json_decode(smokeRead($root . '/composer.lock'), true, 512, JSON_THROW_ON_ERROR);
+    if (!is_array($lock) || !is_array($lock['packages-dev'] ?? null)) {
+        throw new RuntimeException('DevTools composer.lock has no development package list.');
+    }
+    $expectedReference = null;
+    foreach ($lock['packages-dev'] as $package) {
+        if (is_array($package) && ($package['name'] ?? null) === 'axolotl-pm/pocketmine-mp') {
+            $source = $package['source'] ?? null;
+            if (is_array($source)) {
+                $expectedReference = $source['reference'] ?? null;
+            }
+            break;
+        }
+    }
+    if (!is_string($expectedReference) || preg_match('/^[a-f0-9]{40}$/', $expectedReference) !== 1) {
+        throw new RuntimeException('DevTools composer.lock has no valid Axolotl-PM source commit.');
+    }
+    if ($reference !== $expectedReference) {
+        throw new RuntimeException('Installed Axolotl-PM source differs from DevTools composer.lock.');
     }
     foreach (['src', 'generated', 'resources'] as $directory) {
         $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($installed . '/' . $directory, FilesystemIterator::SKIP_DOTS));
@@ -104,12 +121,19 @@ try {
                 continue;
             }
             $relative = substr($entry->getPathname(), strlen($installed) + 1);
-            if (!is_file($server . '/' . $relative) || hash_file('sha256', $entry->getPathname()) !== hash_file('sha256', $server . '/' . $relative)) {
+            $serverFile = $server . '/' . $relative;
+            if (!is_file($serverFile)) {
                 throw new RuntimeException("Server differs from locked Axolotl-PM {$reference}: {$relative}");
+            }
+            if (hash_file('sha256', $entry->getPathname()) !== hash_file('sha256', $serverFile)) {
+                $extension = strtolower(pathinfo($relative, PATHINFO_EXTENSION));
+                if (!in_array($extension, ['md', 'json', 'yml'], true) || str_replace("\r\n", "\n", smokeRead($entry->getPathname())) !== str_replace("\r\n", "\n", smokeRead($serverFile))) {
+                    throw new RuntimeException("Server differs from locked Axolotl-PM {$reference}: {$relative}");
+                }
             }
         }
     }
-    if (hash_file('sha256', $server . '/composer.lock') !== hash_file('sha256', $installed . '/composer.lock')) {
+    if (str_replace("\r\n", "\n", smokeRead($server . '/composer.lock')) !== str_replace("\r\n", "\n", smokeRead($installed . '/composer.lock'))) {
         throw new RuntimeException('Prepared server composer.lock differs from the locked Axolotl-PM source.');
     }
     $run = $root . '/build/runtime-smoke-' . date('Ymd-His') . '-' . bin2hex(random_bytes(3));

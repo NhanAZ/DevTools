@@ -7,8 +7,8 @@ additional boundary.
 
 ## Verified target
 
-- Axolotl-PM **5.47.1**, commit
-  **`b9a3b244993fb8a6df97241f3a3fbe44e2076f4c`**, the development dependency in
+- Axolotl-PM **5.49.1**, commit
+  **`dfe0d07e48a9e8d5a4a242fa43ff1cd3b743a955`**, the development dependency in
   DevTools' `composer.lock`.
 - Windows x64, **PHP 8.4.24 ZTS** with Axolotl-PM's required extensions, including
   `pmmpthread`. PHP 8.1 remains the source compatibility baseline. This runtime
@@ -41,10 +41,13 @@ Use the fresh temporary directory above and run `composer install` there.
 `vendor/` directory. No package update or server source patch is needed.
 
 The server has its own Composer
-autoloader. It does not inherit DevTools' developer autoloader. The harness checks
-the pinned installed revision, source and resource hashes and server lockfile before
-running. Preparing dependencies is an explicit network operation. The harness
-does not download dependencies or change the prepared server source.
+autoloader. It does not inherit DevTools' developer autoloader. The harness reads
+the Axolotl-PM source commit from DevTools' committed `composer.lock`, then checks
+the installed revision, source and resource hashes and server lockfile before
+running. Windows checkout line endings are normalized only for Markdown, JSON,
+YAML and the server lockfile when their bytes differ. Preparing dependencies is
+an explicit network operation. The harness does not download dependencies or
+change the prepared server source.
 
 Each run creates a unique `build/runtime-smoke-*` directory, separate data and
 plugin directories, and binds the test server to loopback with an ephemeral port.
@@ -82,10 +85,10 @@ The [upstream folder loader](https://github.com/pmmp/DevTools/blob/37a4db84df23f
 audited at commit `37a4db84df23f26f26fa4d1431abc279e99c0540`
 registers its source root with the server's `ThreadSafeClassLoader`. DevTools
 retains that integration and adds its own manifest and path diagnostics.
-Axolotl-PM's [pinned plugin manager](https://github.com/axolotl-pm/PocketMine-MP/blob/b9a3b244993fb8a6df97241f3a3fbe44e2076f4c/src/plugin/PluginManager.php)
+Axolotl-PM's [pinned plugin manager](https://github.com/axolotl-pm/PocketMine-MP/blob/dfe0d07e48a9e8d5a4a242fa43ff1cd3b743a955/src/plugin/PluginManager.php)
 owns API compatibility and ordering for hard and soft dependencies and enable failures.
 DevTools does not implement a parallel plugin manager.
-The [pinned thread-safe class loader](https://github.com/axolotl-pm/PocketMine-MP/blob/b9a3b244993fb8a6df97241f3a3fbe44e2076f4c/src/thread/ThreadSafeClassLoader.php)
+The [pinned thread-safe class loader](https://github.com/axolotl-pm/PocketMine-MP/blob/dfe0d07e48a9e8d5a4a242fa43ff1cd3b743a955/src/thread/ThreadSafeClassLoader.php)
 uses shared synchronized lookup tables. The runtime scenarios verify actual
 worker autoloading. They do not exhaust every possible registration timing.
 

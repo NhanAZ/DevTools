@@ -4,6 +4,7 @@
 
 - Require an unannotated object-class return to follow a top-level `instanceof ... || throw ...` guard immediately in the same function.
 - Reject guards inside optional branches and guards invalidated by an intervening assignment. Keep the explicit annotation path and other 1.0.6 dependency preparation behavior.
+- Derive the Axolotl-PM runtime smoke target from the committed Composer lock and align the reproduction guide with the current 5.49.1 pin.
 
 ## 1.0.6 - 2026-10-11
 
