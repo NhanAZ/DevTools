@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.6 - 2026-10-11
+
+- Allow an object-class expression after an explicit `instanceof ... || throw ...` guard proves the runtime object type.
+- Add a regression test for guarded object-class inspection without weakening rejection of unproven dynamic class operations.
+
 ## 1.0.5 - 2026-10-11
 
 - Permit explicitly annotated, guarded runtime class factories after `class_exists()` and `is_subclass_of()` prove the selected class is a supported implementation.

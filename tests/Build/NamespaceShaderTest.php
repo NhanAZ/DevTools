@@ -203,4 +203,39 @@ PHP,
         self::assertIsString($result);
         self::assertStringContainsString('Fixture\Shade\Shared\Callback::class', $result);
     }
+
+    public function test_guarded_object_class_without_annotation_is_allowed(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Translator.php';
+        file_put_contents(
+            $path,
+            <<<'PHP'
+<?php
+namespace Fixture;
+
+use Shared\Virion\Graphic;
+
+final class Translator
+{
+    public function describe(object $graphic): string
+    {
+        $graphic instanceof Graphic || throw new \InvalidArgumentException();
+
+        return $graphic::class;
+    }
+}
+PHP,
+        );
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('Fixture\Shade\Shared\Graphic', $result);
+        self::assertStringContainsString('$graphic::class', $result);
+    }
 }

@@ -1,9 +1,10 @@
-# DevTools 1.0.5
+# DevTools 1.0.6
 
 DevTools loads folder plugins and shared development virions on Axolotl-PM and builds standalone plugin PHARs.
 
 ## Changes
 
+- Allow an object-class expression after an explicit `instanceof ... || throw ...` guard proves the runtime object type. This supports safe runtime error reporting without weakening the rejection of unproven dynamic class operations.
 - Prepare a locked Composer virion when its single PSR-4 or namespace-based PSR-0 source directory is written as a one-element array.
 - Prepare a package with one classmap root when every PHP file lies inside its declared namespace tree and its classes pass DevTools' existing namespace and filename checks.
 - Preserve lockfile, installed-package metadata, source hash, symlink and dependency validation for these packages.
@@ -14,27 +15,27 @@ Root plugin classmaps and multiple package roots remain unsupported. DevTools al
 
 ## Install
 
-Download `DevTools-1.0.5.phar` and verify its SHA-256 with `SHA256SUMS.txt`. Stop the server, place the file at `plugins/DevTools.phar`, start the server, and run `/devtools status`.
+Download `DevTools-1.0.6.phar` and verify its SHA-256 with `SHA256SUMS.txt`. Stop the server, place the file at `plugins/DevTools.phar`, start the server, and run `/devtools status`.
 
-The examples ZIP contains the HelloShared plugin and SharedGreeting library. Follow the [example guide](https://github.com/NhanAZ/DevTools/blob/v1.0.5/examples/README.md) to load source and build a standalone PHAR.
+The examples ZIP contains the HelloShared plugin and SharedGreeting library. Follow the [example guide](https://github.com/NhanAZ/DevTools/blob/v1.0.6/examples/README.md) to load source and build a standalone PHAR.
 
 ## Compatibility and verification
 
-PHP 8.1 is the source and build baseline. The release candidate gate runs PHPStan max, syntax, style, unit tests, documentation checks and artifact validation on the selected commit. The [runtime validation guide](https://github.com/NhanAZ/DevTools/blob/v1.0.5/docs/runtime-validation.md) describes the pinned Axolotl-PM test and its limits.
+PHP 8.1 is the source and build baseline. The release candidate gate runs PHPStan max, syntax, style, unit tests, documentation checks and artifact validation on the selected commit. The [runtime validation guide](https://github.com/NhanAZ/DevTools/blob/v1.0.6/docs/runtime-validation.md) describes the pinned Axolotl-PM test and its limits.
 
-The 1.0.3 release remains available for rollback. A successful build verifies packaging. It does not prove a server boot or gameplay behavior. Runtime evidence for this release is recorded separately from candidate metadata.
+The 1.0.5 release remains available for rollback. A successful build verifies packaging. It does not prove a server boot or gameplay behavior. Runtime evidence for this release is recorded separately from candidate metadata.
 
 ## Release assets
 
-- `DevTools-1.0.5.phar` contains the installable plugin.
-- `DevTools-examples-1.0.5.zip` contains examples, a build workflow and a coding agent template.
+- `DevTools-1.0.6.phar` contains the installable plugin.
+- `DevTools-examples-1.0.6.zip` contains examples, a build workflow and a coding agent template.
 - `RELEASE_NOTES.md` describes this release.
 - `candidate.json` identifies the source commit, build run and asset hashes.
 - `SHA256SUMS.txt` lists checksums.
 
 ## Documentation
 
-- [Installation](https://github.com/NhanAZ/DevTools/blob/v1.0.5/docs/installation.md)
-- [CLI and JSON](https://github.com/NhanAZ/DevTools/blob/v1.0.5/docs/cli.md)
-- [Dependency support](https://github.com/NhanAZ/DevTools/blob/v1.0.5/docs/dependencies.md)
-- [GitHub workflows](https://github.com/NhanAZ/DevTools/blob/v1.0.5/docs/github-actions.md)
+- [Installation](https://github.com/NhanAZ/DevTools/blob/v1.0.6/docs/installation.md)
+- [CLI and JSON](https://github.com/NhanAZ/DevTools/blob/v1.0.6/docs/cli.md)
+- [Dependency support](https://github.com/NhanAZ/DevTools/blob/v1.0.6/docs/dependencies.md)
+- [GitHub workflows](https://github.com/NhanAZ/DevTools/blob/v1.0.6/docs/github-actions.md)

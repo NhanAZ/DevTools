@@ -10,8 +10,11 @@ use function ltrim;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\BinaryOp\BooleanOr;
 use PhpParser\Node\Expr\ClassConstFetch;
 use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Expr\Instanceof_;
+use PhpParser\Node\Expr\Throw_;
 use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\FunctionLike;
 use PhpParser\Node\Identifier;
@@ -128,7 +131,54 @@ final class DynamicClassReferencePolicy
             return false;
         }
 
-        return self::allowsAnnotated($node, $node->class);
+        return self::allowsAnnotated($node, $node->class)
+            || self::hasGuardedObjectClass($node, $node->class);
+    }
+
+    private static function hasGuardedObjectClass(Node $node, Variable $class): bool
+    {
+        $function = self::enclosingFunction($node);
+        if ($function === null) {
+            return false;
+        }
+
+        $visitor = new class ($node, $class) extends NodeVisitorAbstract {
+            private bool $guarded = false;
+
+            public function __construct(
+                private readonly Node $target,
+                private readonly Variable $class,
+            ) {}
+
+            public function isGuarded(): bool
+            {
+                return $this->guarded;
+            }
+
+            public function enterNode(Node $node): ?int
+            {
+                if ($node === $this->target) {
+                    return self::STOP_TRAVERSAL;
+                }
+
+                if ($node instanceof BooleanOr
+                    && $node->left instanceof Instanceof_
+                    && $node->right instanceof Throw_
+                    && $node->left->expr instanceof Variable
+                    && $node->left->expr->name === $this->class->name
+                    && $node->left->class instanceof Name) {
+                    $this->guarded = true;
+                }
+
+                return null;
+            }
+        };
+
+        $traverser = new NodeTraverser();
+        $traverser->addVisitor($visitor);
+        $traverser->traverse($function->getStmts() ?? []);
+
+        return $visitor->isGuarded();
     }
 
     private static function variableName(Expr $class): ?string
