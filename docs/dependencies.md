@@ -18,6 +18,14 @@ Only dependencies reachable from the final selected roots belong to a build. Dep
 
 For a package supplied from Git outside Composer, use the repository and full commit supplied by its author, check out that commit explicitly, and place the documented package subdirectory in `virions/`. DevTools does not infer repository URLs from package names, fetch Git revisions, or maintain a second Git lockfile. Source acquisition for these packages remains an external, explicit step. `.poggit.yml` library names and constraints remain a migration input, not a download instruction.
 
+If `.poggit.yml` is retained for Poggit while the reviewed Composer lock supplies all libraries for the DevTools build, set the following in `devtools.yml`:
+
+```yaml
+import-poggit-libraries: false
+```
+
+This affects only DevTools dependency selection. It leaves `.poggit.yml` untouched and still imports explicit `virions` from `devtools.yml` and `extra.devtools.virions` from Composer. The default is to import matching `.poggit.yml` libraries; an invalid value fails before building.
+
 ## Composer preparation
 
 Run Composer in the plugin project, with a reviewed lockfile. Dependency install scripts and plugins are not needed for the supported formats.
@@ -34,13 +42,13 @@ Preparation requires a **new destination directory**. All selected packages are 
 
 Supported Composer packages must meet the following requirements.
 
-- A locked semantic tag such as `1.2.3` or `v1.2.3`, with `extra.virion.spec` `3.0` or `3.1` and one `namespace-root`.
+- A locked semantic tag such as `1.2.3` or `v1.2.3`, or a Composer `dev-` branch locked to a full 40-character Git commit in `source.reference`. When `dist.reference` is present, it must match. The package must declare `extra.virion.spec` `3.0` or `3.1` and one `namespace-root`.
 - One PSR-4 mapping for that namespace to a single directory, or one namespace-based PSR-0 mapping to a single directory. Composer's one-element directory array is accepted. A package may instead use one classmap root when all PHP source is under the `namespace-root` directory inside it. Every class must match its namespace, filename and case. Legacy underscore-to-directory PSR-0 class layouts are not supported.
 - Runtime package dependencies that also satisfy this contract. Composer's locked graph decides their versions. DevTools does not solve constraints or accept virtual packages or replacements as missing implementation code. The one platform exception is `pocketmine/pocketmine-mp` when the locked `axolotl-pm/pocketmine-mp` package explicitly replaces it. Axolotl-PM itself is never bundled as a virion.
 - PHP platform constraints using caret versions or comparison ranges, optionally separated by `||`, `php-64bit` with `*`, and `ext-*` requirements with `*`. These are preserved in generated metadata and checked during preparation and shared loading. Composer checks `composer-runtime-api` during installation, so DevTools omits it from the generated runtime manifest. Other platform expressions fail explicitly. The generated manifest also retains DevTools' PHP 8.1 baseline. This does not override the package's stricter Composer constraint.
 - Resources colocated under the selected source directory when code relies on `__DIR__` relative paths. Their bytes and relative layout are preserved.
 
-DevTools explicitly rejects `shared-namespace-root`, Composer `autoload.files`, multiple package source roots, classmap PHP files outside the declared namespace tree, custom vendor directories, branch and development versions, package root `resources/`, and general Composer packages without supported virion metadata. Root plugin `autoload.files` and classmap entries are also rejected because Axolotl-PM does not execute Composer's bootstrap automatically. Root Composer mappings must use one directory per namespace within `src/`. Paths outside `src/` and arrays of source roots are rejected. Composer mappings do not register another runtime loader. Plugin namespace and filename layout remain governed by `plugin.yml` and `src/`.
+DevTools explicitly rejects `shared-namespace-root`, Composer `autoload.files`, multiple package source roots, classmap PHP files outside the declared namespace tree, custom vendor directories, development versions without a full Git commit, package root `resources/`, and general Composer packages without supported virion metadata. Root plugin `autoload.files` and classmap entries are also rejected because Axolotl-PM does not execute Composer's bootstrap automatically. Root Composer mappings must use one directory per namespace within `src/`. Paths outside `src/` and arrays of source roots are rejected. Composer mappings do not register another runtime loader. Plugin namespace and filename layout remain governed by `plugin.yml` and `src/`.
 
 Root mappings must also resolve each namespace to exactly the directory used by Axolotl-PM, including case. For example, with `src-namespace-prefix: MyPlugin`, `MyPlugin\\Extra\\` must map to `src/Extra/`. Mapping it to `src/extra/` or a namespace outside that plugin prefix is rejected, even though the directory lies under `src/`.
 
@@ -48,7 +56,7 @@ The existing DevTools self-build explicitly packages its PHP parser source and l
 
 ## Provenance and output safety
 
-The Composer content hash must match the current root configuration. Installed package version, source and distribution metadata, autoload, requirements and virion metadata must agree with the lock. Preparation records the source and distribution references, complete lock SHA-256, canonical package metadata SHA-256, generated manifest SHA-256, and a deterministic hash of prepared source paths and bytes in `devtools-provenance.json`.
+The Composer content hash must match the current root configuration. Installed package version, source and distribution metadata, autoload, requirements and virion metadata must agree with the lock. A locked `dev-` branch receives the internal virion version `0.0.0-commit.<full SHA>` so two commits are distinct during selection. This identifies a source revision, not an upstream semantic release or a compatibility claim. Preparation records the original Composer version, source and distribution references, complete lock SHA-256, canonical package metadata SHA-256, generated manifest SHA-256, and a deterministic hash of prepared source paths and bytes in `devtools-provenance.json`.
 
 Build selection and Composer-bound shared loading check the **package** metadata fingerprint, prepared manifest and source hashes. Two plugins with different lockfiles may share the same prepared package when that package's locked metadata is identical. Changing a tag's revision, prepared manifest or prepared source requires preparation again. Prepared packages from an older version without `manifestSha256` must be prepared again into a new directory. Provenance also accompanies the PHAR under `META-INF/virions/`. Dependency metadata appears in the build JSON result. These checks detect drift against reviewed local Composer inputs. They are not independent cryptographic authentication of upstream source.
 

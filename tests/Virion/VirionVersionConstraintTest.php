@@ -35,6 +35,9 @@ final class VirionVersionConstraintTest extends TestCase
         yield 'major wildcard' => ['1.*', '1.99.0', true];
         yield 'comparison range' => ['>=1.2.0 <2.0.0', '1.8.4', true];
         yield 'comparison range upper bound' => ['>=1.2.0 <2.0.0', '2.0.0', false];
+        $commit = '0.0.0-commit.' . str_repeat('a', 39);
+        yield 'locked commit match' => [$commit . 'b', $commit . 'b', true];
+        yield 'locked commit mismatch despite PHP version comparison' => [$commit . 'b', $commit . 'c', false];
     }
 
     public function test_unsupported_constraint_is_rejected_with_guidance(): void
@@ -43,5 +46,11 @@ final class VirionVersionConstraintTest extends TestCase
         $this->expectExceptionMessage('Use *, an exact version');
 
         new VirionVersionConstraint('^1.2');
+    }
+
+    public function test_locked_commit_does_not_accept_a_range_constraint(): void
+    {
+        $this->expectException(VirionException::class);
+        new VirionVersionConstraint('^0.0.0-commit.' . str_repeat('a', 40));
     }
 }

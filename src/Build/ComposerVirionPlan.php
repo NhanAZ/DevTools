@@ -111,10 +111,7 @@ final class ComposerVirionPlan
                 throw new BuildException("Composer virion {$name} has an invalid extra.virion.namespace-root.");
             }
             $this->sourceDirectory($package);
-            $version = $package['version'] ?? null;
-            if (!is_string($version) || !VirionVersionConstraint::isValidVersion(ltrim($version, 'v'))) {
-                throw new BuildException("Composer virion {$name} needs a tagged semantic version in composer.lock. Development branch versions are unsupported.");
-            }
+            $this->version($package);
             $result[$name] = $package;
             array_push($pending, ...$this->dependencyNames($package['require'] ?? [], $name));
         }
@@ -170,7 +167,25 @@ final class ComposerVirionPlan
         if (!is_string($version)) {
             throw new BuildException('Missing Composer package version.');
         }
-        return ltrim($version, 'v');
+        $semanticVersion = ltrim($version, 'v');
+        if (VirionVersionConstraint::isValidVersion($semanticVersion)) {
+            return $semanticVersion;
+        }
+        $name = is_string($package['name'] ?? null) ? $package['name'] : 'unknown';
+        $source = $package['source'] ?? null;
+        $reference = is_array($source) ? ($source['reference'] ?? null) : null;
+        if (preg_match('~^dev-[A-Za-z0-9._/-]+$~D', $version) !== 1
+            || !is_array($source)
+            || ($source['type'] ?? null) !== 'git'
+            || !is_string($reference)
+            || preg_match('/^[a-fA-F0-9]{40}$/D', $reference) !== 1) {
+            throw new BuildException("Composer virion {$name} needs a semantic version or a development branch locked to a full Git commit in composer.lock.");
+        }
+        $dist = $package['dist'] ?? null;
+        if (is_array($dist) && isset($dist['reference']) && $dist['reference'] !== $reference) {
+            throw new BuildException("Composer virion {$name} has conflicting source and dist commit references in composer.lock.");
+        }
+        return '0.0.0-commit.' . strtolower($reference);
     }
 
     /** @param array<string, mixed> $package */

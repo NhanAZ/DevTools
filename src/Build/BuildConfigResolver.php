@@ -9,6 +9,7 @@ use function array_values;
 use function basename;
 use function file_get_contents;
 use function is_array;
+use function is_bool;
 use function is_file;
 use function is_string;
 use function json_decode;
@@ -36,16 +37,23 @@ final class BuildConfigResolver
         $virions = [];
         /** @var array<string, string> $includePaths */
         $includePaths = [];
+        $importPoggitLibraries = true;
 
         $localPath = $projectRoot . DIRECTORY_SEPARATOR . 'devtools.yml';
         if (is_file($localPath)) {
             $local = $this->yamlReader->read($localPath);
             foreach (array_keys($local) as $key) {
-                if (!in_array($key, ['virions', 'include-paths'], true)) {
+                if (!in_array($key, ['virions', 'include-paths', 'import-poggit-libraries'], true)) {
                     throw new BuildException(
-                        "Unknown key \"{$key}\" in {$localPath}. Supported keys are virions and include-paths.",
+                        "Unknown key \"{$key}\" in {$localPath}. Supported keys are virions, include-paths and import-poggit-libraries.",
                     );
                 }
+            }
+            if (isset($local['import-poggit-libraries'])) {
+                if (!is_bool($local['import-poggit-libraries'])) {
+                    throw new BuildException("import-poggit-libraries in {$localPath} must be true or false.");
+                }
+                $importPoggitLibraries = $local['import-poggit-libraries'];
             }
             $this->addVirionList($local['virions'] ?? [], $virions, 'virions', $localPath);
             $this->addPathList($local['include-paths'] ?? [], $includePaths, $localPath);
@@ -71,7 +79,7 @@ final class BuildConfigResolver
         }
 
         $poggitPath = $projectRoot . DIRECTORY_SEPARATOR . '.poggit.yml';
-        if (is_file($poggitPath)) {
+        if ($importPoggitLibraries && is_file($poggitPath)) {
             $poggit = $this->yamlReader->read($poggitPath);
             $projects = $poggit['projects'] ?? [];
             if (is_array($projects)) {

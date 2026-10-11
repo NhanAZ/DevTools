@@ -8,12 +8,15 @@ use function explode;
 use function preg_match;
 use function preg_split;
 use function sprintf;
+use function str_contains;
+use function strtolower;
 use function trim;
 use function version_compare;
 
 final class VirionVersionConstraint
 {
     private const VERSION_PATTERN = '(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?';
+    private const COMMIT_VERSION_PATTERN = '/^0\.0\.0-commit\.[a-fA-F0-9]{40}$/D';
 
     /** @var list<string> */
     private readonly array $tokens;
@@ -61,6 +64,9 @@ final class VirionVersionConstraint
 
     private function isValidToken(string $token): bool
     {
+        if (str_contains(strtolower($token), '0.0.0-commit.')) {
+            return preg_match(self::COMMIT_VERSION_PATTERN, $token) === 1;
+        }
         return $token === '*'
             || preg_match('/^(?:\^|~|<=|>=|<|>|=)?' . self::VERSION_PATTERN . '$/D', $token) === 1
             || preg_match('/^(?:0|[1-9][0-9]*)\.\*$/D', $token) === 1
@@ -71,6 +77,9 @@ final class VirionVersionConstraint
     {
         if ($token === '*') {
             return true;
+        }
+        if (preg_match(self::COMMIT_VERSION_PATTERN, $version) === 1 || preg_match(self::COMMIT_VERSION_PATTERN, $token) === 1) {
+            return strtolower($version) === strtolower($token);
         }
         if (preg_match('/^(?<major>0|[1-9][0-9]*)\.\*$/D', $token, $match) === 1) {
             $minimum = $match['major'] . '.0.0';

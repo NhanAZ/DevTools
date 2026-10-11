@@ -171,6 +171,120 @@ final class ComposerVirionPreparerTest extends TestCase
         $this->builder()->build($project, $destination, $project . '/build');
     }
 
+    public function test_git_development_branch_with_locked_commit_is_prepared_and_built(): void
+    {
+        $project = $this->project();
+        $plan = new ComposerVirionPlan();
+        $root = $plan->readJson($project . '/composer.json');
+        $requirements = $root['require'] ?? null;
+        self::assertIsArray($requirements);
+        $requirements['example/a'] = 'dev-master#' . str_repeat('a', 40);
+        $root['require'] = $requirements;
+        $this->json($project . '/composer.json', $root);
+
+        $lock = $plan->readJson($project . '/composer.lock');
+        $packages = $lock['packages'];
+        self::assertIsArray($packages);
+        $package = $plan->object($packages[0], 'fixture package');
+        $package['version'] = 'dev-master';
+        $package['dist'] = ['type' => 'zip', 'reference' => str_repeat('a', 40)];
+        $packages[0] = $package;
+        $lock['packages'] = $packages;
+        ksort($root);
+        $lock['content-hash'] = md5(json_encode($root, JSON_THROW_ON_ERROR));
+        $this->json($project . '/composer.lock', $lock);
+        $installed = $plan->readJson($project . '/vendor/composer/installed.json');
+        $installedPackages = $installed['packages'] ?? null;
+        self::assertIsArray($installedPackages);
+        $installedPackages[0] = $package;
+        $installed['packages'] = $installedPackages;
+        $this->json($project . '/vendor/composer/installed.json', $installed);
+
+        $destination = $this->temporaryDirectory . '/prepared';
+        $metadata = (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+        self::assertCount(2, $metadata);
+        $version = '0.0.0-commit.' . str_repeat('a', 40);
+        self::assertSame($version, $metadata[0]['version']);
+        self::assertSame('dev-master', $metadata[0]['composerVersion']);
+        self::assertStringContainsString($version, (string) file_get_contents($destination . '/example.a/virion.yml'));
+        $result = $this->builder()->build($project, $destination, $project . '/build');
+        self::assertCount(2, $result->dependencies);
+        self::assertSame($version, $result->dependencies[0]['version']);
+    }
+
+    public function test_development_branch_without_full_git_reference_is_rejected(): void
+    {
+        $project = $this->project();
+        $plan = new ComposerVirionPlan();
+        $lock = $plan->readJson($project . '/composer.lock');
+        $packages = $lock['packages'];
+        self::assertIsArray($packages);
+        $package = $plan->object($packages[0], 'fixture package');
+        $package['version'] = 'dev-master';
+        $source = $package['source'] ?? null;
+        self::assertIsArray($source);
+        $source['reference'] = 'abcdef0';
+        $package['source'] = $source;
+        $packages[0] = $package;
+        $lock['packages'] = $packages;
+        $this->json($project . '/composer.lock', $lock);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('locked to a full Git commit');
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+    }
+
+    public function test_development_branch_with_conflicting_dist_reference_is_rejected(): void
+    {
+        $project = $this->project();
+        $plan = new ComposerVirionPlan();
+        $lock = $plan->readJson($project . '/composer.lock');
+        $packages = $lock['packages'];
+        self::assertIsArray($packages);
+        $package = $plan->object($packages[0], 'fixture package');
+        $package['version'] = 'dev-master';
+        $package['dist'] = ['type' => 'zip', 'reference' => str_repeat('b', 40)];
+        $packages[0] = $package;
+        $lock['packages'] = $packages;
+        $this->json($project . '/composer.lock', $lock);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('conflicting source and dist commit references');
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+    }
+
+    public function test_locked_composer_build_can_explicitly_skip_legacy_poggit_libraries(): void
+    {
+        $project = $this->project();
+        file_put_contents($project . '/.poggit.yml', "projects:\n  BuildFixture:\n    libs:\n      - src: Legacy/Package/Legacy\n        version: 3.1.0\n");
+        file_put_contents($project . '/devtools.yml', "import-poggit-libraries: false\n");
+        $destination = $this->temporaryDirectory . '/prepared';
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+
+        self::assertCount(2, $this->builder()->build($project, $destination, $project . '/build')->dependencies);
+    }
+
+    public function test_legacy_poggit_libraries_remain_required_by_default(): void
+    {
+        $project = $this->project();
+        file_put_contents($project . '/.poggit.yml', "projects:\n  BuildFixture:\n    libs:\n      - src: Legacy/Package/Legacy\n        version: 3.1.0\n");
+        $destination = $this->temporaryDirectory . '/prepared';
+        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $destination);
+
+        $this->expectExceptionMessage('Plugin declares virion Legacy 3.1.0');
+        $this->builder()->build($project, $destination, $project . '/build');
+    }
+
+    public function test_poggit_import_setting_requires_a_boolean(): void
+    {
+        $project = $this->project();
+        file_put_contents($project . '/devtools.yml', "import-poggit-libraries: disabled\n");
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('must be true or false');
+        $this->builder()->build($project, $this->temporaryDirectory . '/prepared', $project . '/build');
+    }
+
     public function test_unsupported_autoload_is_rejected(): void
     {
         $project = $this->project(['files' => ['bootstrap.php']]);

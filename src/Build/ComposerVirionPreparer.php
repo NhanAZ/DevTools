@@ -132,7 +132,7 @@ final class ComposerVirionPreparer
                         $this->filesystem->copyFile($source . '/' . $license, $target . '/' . $license);
                     }
                 }
-                $metadata = ['package' => $name, 'name' => $localName, 'version' => $manifest['version'], 'antigen' => $antigen, 'source' => $package['source'] ?? null, 'dist' => $package['dist'] ?? null, 'composerLockSha256' => hash_file('sha256', $projectRoot . '/composer.lock')];
+                $metadata = ['package' => $name, 'name' => $localName, 'version' => $manifest['version'], 'composerVersion' => $package['version'], 'antigen' => $antigen, 'source' => $package['source'] ?? null, 'dist' => $package['dist'] ?? null, 'composerLockSha256' => hash_file('sha256', $projectRoot . '/composer.lock')];
                 $metadata['sourceSha256'] = (new VirionSourceFingerprint())->hash($target . '/src');
                 $metadata['manifestSha256'] = hash_file('sha256', $target . '/virion.yml');
                 $metadata['composerPackageSha256'] = $plan->fingerprint($package);

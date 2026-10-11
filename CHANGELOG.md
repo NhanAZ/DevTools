@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.8 - 2026-10-11
+
+- Prepare Composer virions from `dev-` branches only when `composer.lock` pins a full Git commit and source and distribution references agree. Give each prepared revision a distinct internal version and keep the original Composer version in provenance.
+- Match internal commit versions by exact revision because PHP version comparison can consider different hexadecimal suffixes equal.
+- Add `import-poggit-libraries: false` for projects that keep legacy Poggit declarations but use their reviewed Composer lock as the DevTools dependency source. The default still imports Poggit libraries.
+- Keep dynamic class shading guards in place. Preparation alone does not certify a standalone PHAR.
+
 ## 1.0.7 - 2026-10-11
 
 - Require an unannotated object-class return to follow a top-level `instanceof ... || throw ...` guard immediately in the same function.
