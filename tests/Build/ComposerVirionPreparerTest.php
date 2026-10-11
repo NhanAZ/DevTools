@@ -104,8 +104,15 @@ final class ComposerVirionPreparerTest extends TestCase
     {
         $project = $this->project();
         file_put_contents($project . '/vendor/example/a/src/Other.php', '<?php namespace Example\\LibraryA; final class greeting {}');
-        $this->expectExceptionMessage('declares Example\\LibraryA\\greeting in both');
-        (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+        try {
+            (new ComposerVirionPreparer($this->filesystem))->prepare($project, $this->temporaryDirectory . '/prepared');
+            self::fail('Expected duplicate class rejection.');
+        } catch (BuildException $error) {
+            $message = $error->getMessage();
+            self::assertStringContainsString('example\\librarya\\greeting', strtolower($message));
+            self::assertStringContainsString('Greeting.php', $message);
+            self::assertStringContainsString('Other.php', $message);
+        }
     }
 
     public function test_transitive_pocketmine_requirement_without_axolotl_replacement_fails(): void
