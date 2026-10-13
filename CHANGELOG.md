@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.11 - 2026-10-13
+
+- Allow dynamic `is_a()` target types when `allow_string` is omitted and the target is a variable. PHP compares that target without autoloading it; calls with an explicit third argument remain subject to the dynamic-reference guard.
+- Add regression tests for the allowed comparison and the rejected autoload-enabled form.
+
 ## 1.0.10 - 2026-10-11
 
 - Prepare locked Composer virions when a PHP file declares its matching class and additional classes in the same namespace and directory. Generate a small autoload shim for each additional class and record the mapping in provenance.

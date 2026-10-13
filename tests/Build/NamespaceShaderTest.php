@@ -50,6 +50,98 @@ PHP;
         (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
     }
 
+    public function test_dynamic_is_a_target_type_is_allowed_with_default_non_autoloading_mode(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Matcher.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+namespace Fixture;
+
+use function is_a;
+
+final class Matcher
+{
+    public function matches(object $throwable, string $class): bool
+    {
+        return is_a($throwable, $class);
+    }
+}
+PHP);
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('is_a($throwable, $class)', $result);
+
+        $autoloaded = [];
+        $autoload = static function (string $className) use (&$autoloaded): void {
+            $autoloaded[] = $className;
+        };
+        spl_autoload_register($autoload);
+        try {
+            self::assertFalse(\is_a(new \stdClass(), 'Fixture\\MissingTarget'));
+        } finally {
+            spl_autoload_unregister($autoload);
+        }
+        self::assertSame([], $autoloaded);
+    }
+
+    public function test_dynamic_is_a_target_type_with_autoload_enabled_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'Matcher.php', <<<'PHP'
+<?php
+namespace Fixture;
+
+final class Matcher
+{
+    public function matches(mixed $throwable, string $class): bool
+    {
+        return is_a($throwable, $class, true);
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class-name argument to is_a()');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
+    public function test_dynamic_target_to_namespaced_is_a_function_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'Matcher.php', <<<'PHP'
+<?php
+namespace Fixture;
+
+function is_a(mixed $objectOrClass, string $class): bool
+{
+    return true;
+}
+
+final class Matcher
+{
+    public function matches(mixed $throwable, string $class): bool
+    {
+        return is_a($throwable, $class);
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class-name argument to is_a()');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
     public function test_shaded_namespace_with_same_text_prefix_is_not_rejected(): void
     {
         $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';

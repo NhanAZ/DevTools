@@ -67,6 +67,7 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
             foreach ($arguments as $argument) {
                 if (isset($node->args[$argument]) && $node->args[$argument] instanceof Arg
                     && !$this->isStaticClassExpression($node->args[$argument]->value)
+                    && !($function === 'is_a' && DynamicClassReferencePolicy::allowsNonAutoloadingIsATypeArgument($node))
                     && !($function === 'class_exists'
                         && DynamicClassReferencePolicy::allowsAnnotated($node, $node->args[$argument]->value))) {
                     throw new BuildException(

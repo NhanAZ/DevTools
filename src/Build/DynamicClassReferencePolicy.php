@@ -36,6 +36,26 @@ use function strtolower;
  */
 final class DynamicClassReferencePolicy
 {
+    /**
+     * Allows the target type argument to is_a() when PHP's allow_string argument is omitted.
+     * With its default false value, the dynamic target type is only compared; it is not loaded.
+     */
+    public static function allowsNonAutoloadingIsATypeArgument(FuncCall $node): bool
+    {
+        $name = $node->name;
+        if (!$name instanceof Name || strtolower(ltrim($name->toString(), '\\')) !== 'is_a'
+            || count($node->args) !== 2
+            || !$node->args[1] instanceof Arg
+            || !$node->args[1]->value instanceof Variable) {
+            return false;
+        }
+
+        $resolvedName = $name->getAttribute('resolvedName');
+        return $name->isFullyQualified()
+            || ($resolvedName instanceof Name && $resolvedName->isFullyQualified()
+                && strtolower(ltrim($resolvedName->toString(), '\\')) === 'is_a');
+    }
+
     public static function allowsAnnotated(Node $node, Expr $class): bool
     {
         $variable = self::variableName($class);
