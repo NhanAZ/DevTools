@@ -91,6 +91,72 @@ PHP);
         self::assertSame([], $autoloaded);
     }
 
+    public function test_dynamic_instanceof_target_variable_is_allowed_without_autoloading(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Matcher.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+namespace Fixture;
+
+final class Matcher
+{
+    public function matches(object $value, string $className): bool
+    {
+        return $value instanceof $className;
+    }
+}
+PHP);
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('$value instanceof $className', $result);
+
+        require_once $path;
+        $autoloaded = [];
+        $autoload = static function (string $className) use (&$autoloaded): void {
+            $autoloaded[] = $className;
+        };
+        spl_autoload_register($autoload);
+        try {
+            $matcherClass = $this->runtimeFixtureClass('Matcher');
+            $matcher = (new \ReflectionClass($matcherClass))->newInstance();
+            $matches = new \ReflectionMethod($matcher, 'matches');
+            self::assertFalse($matches->invoke($matcher, new \stdClass(), 'Fixture\\MissingTarget'));
+        } finally {
+            spl_autoload_unregister($autoload);
+        }
+        self::assertSame([], $autoloaded);
+    }
+
+    public function test_computed_instanceof_target_remains_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'UnsafeMatcher.php', <<<'PHP'
+<?php
+namespace Fixture;
+
+final class UnsafeMatcher
+{
+    public function matches(object $value, string $className, string $suffix): bool
+    {
+        return $value instanceof ($className . $suffix);
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+    }
+
     public function test_dynamic_is_a_target_type_with_autoload_enabled_is_rejected(): void
     {
         $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
@@ -140,6 +206,181 @@ PHP);
         $this->expectExceptionMessage('dynamic class-name argument to is_a()');
 
         (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
+    public function test_current_fiber_suspend_is_rewritten_to_the_native_static_call(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'GreenThread.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+namespace Fixture;
+
+use Fiber;
+
+final class GreenThread
+{
+    public function suspendCurrent(): void
+    {
+        $fiberCurrent = Fiber::getCurrent();
+        if ($fiberCurrent !== null) {
+            $fiberCurrent::suspend();
+        }
+    }
+}
+PHP);
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('\Fiber::suspend()', $result);
+        self::assertStringNotContainsString('$fiberCurrent::suspend()', $result);
+
+        require_once $path;
+        $greenThreadClass = $this->runtimeFixtureClass('GreenThread');
+        $fiber = new \Fiber(static function () use ($greenThreadClass): void {
+            $greenThread = (new \ReflectionClass($greenThreadClass))->newInstance();
+            (new \ReflectionMethod($greenThread, 'suspendCurrent'))->invoke($greenThread);
+        });
+        $fiber->start();
+        self::assertTrue($fiber->isSuspended());
+        $fiber->resume();
+        self::assertTrue($fiber->isTerminated());
+    }
+
+    public function test_dynamic_static_call_without_exact_current_fiber_guard_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'Unsafe.php', <<<'PHP'
+<?php
+namespace Fixture;
+
+use Fiber;
+
+final class Unsafe
+{
+    public function suspend(): void
+    {
+        $fiberCurrent = Fiber::getCurrent();
+        if ($fiberCurrent != null) {
+            $fiberCurrent::suspend();
+        }
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+    }
+
+    public function test_current_fiber_dynamic_method_other_than_suspend_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'Unsafe.php', <<<'PHP'
+<?php
+namespace Fixture;
+
+use Fiber;
+
+final class Unsafe
+{
+    public function resumeCurrent(): void
+    {
+        $fiberCurrent = Fiber::getCurrent();
+        if ($fiberCurrent !== null) {
+            $fiberCurrent::resume();
+        }
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+    }
+
+    public function test_reflection_of_late_bound_called_class_uses_the_bound_object(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Thread.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+namespace Fixture;
+
+use Fiber;
+use ReflectionClass;
+use function get_called_class;
+
+class Thread
+{
+    public function reflectedClass(): string
+    {
+        $reflectedClass = '';
+        $fiber = new Fiber(function () use (&$reflectedClass): void {
+            $className = get_called_class();
+            $reflection = new ReflectionClass($className);
+            $reflectedClass = $reflection->getName();
+        });
+        $fiber->start();
+
+        return $reflectedClass;
+    }
+}
+
+final class ConcreteThread extends Thread
+{
+}
+PHP);
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('new ReflectionClass($this)', $result);
+        self::assertStringNotContainsString('new ReflectionClass($className)', $result);
+
+        require_once $path;
+        $threadClass = $this->runtimeFixtureClass('ConcreteThread');
+        $thread = (new \ReflectionClass($threadClass))->newInstance();
+        self::assertSame('Fixture\\ConcreteThread', (new \ReflectionMethod($thread, 'reflectedClass'))->invoke($thread));
+    }
+
+    public function test_arbitrary_reflection_class_string_is_still_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'UnsafeReflection.php', <<<'PHP'
+<?php
+namespace Fixture;
+
+use ReflectionClass;
+
+final class UnsafeReflection
+{
+    public function reflect(string $className): ReflectionClass
+    {
+        $reflection = new ReflectionClass($className);
+        return $reflection;
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic ReflectionClass');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
     }
 
     public function test_shaded_namespace_with_same_text_prefix_is_not_rejected(): void
@@ -444,5 +685,16 @@ PHP);
         $this->expectException(BuildException::class);
         $this->expectExceptionMessage('dynamic class reference');
         (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
+    /** @return class-string<object> */
+    private function runtimeFixtureClass(string $shortName): string
+    {
+        $className = 'Fixture\\' . $shortName;
+        if (!class_exists($className)) {
+            self::fail('The runtime fixture class was not loaded.');
+        }
+
+        return $className;
     }
 }

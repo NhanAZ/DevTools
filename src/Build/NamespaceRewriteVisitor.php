@@ -16,6 +16,7 @@ use PhpParser\Node\Expr\Instanceof_;
 use PhpParser\Node\Expr\New_;
 use PhpParser\Node\Expr\StaticCall;
 use PhpParser\Node\Expr\StaticPropertyFetch;
+use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\InterpolatedStringPart;
 use PhpParser\Node\Name;
 use PhpParser\Node\Name\FullyQualified;
@@ -39,6 +40,12 @@ final class NamespaceRewriteVisitor extends NodeVisitorAbstract
 
     public function enterNode(Node $node): ?Node
     {
+        if ($node instanceof New_ && isset($node->args[0]) && $node->args[0] instanceof Arg
+            && DynamicClassReferencePolicy::allowsCalledClassReflection($node)) {
+            $node->args[0]->value = new Variable('this');
+            return null;
+        }
+
         if ($node instanceof String_ || $node instanceof InterpolatedStringPart) {
             foreach ($this->replacements as $original => $replacement) {
                 if ($this->containsNamespace($node->value, $original)) {
@@ -68,6 +75,14 @@ final class NamespaceRewriteVisitor extends NodeVisitorAbstract
         if (($node instanceof New_ || $node instanceof Instanceof_ || $node instanceof StaticCall
             || $node instanceof StaticPropertyFetch || $node instanceof ClassConstFetch)
             && $node->class instanceof Expr) {
+            if ($node instanceof Instanceof_
+                && DynamicClassReferencePolicy::allowsNonAutoloadingInstanceofTarget($node)) {
+                return null;
+            }
+            if ($node instanceof StaticCall && DynamicClassReferencePolicy::allowsCurrentFiberSuspend($node)) {
+                $node->class = new FullyQualified('Fiber');
+                return null;
+            }
             if ($node instanceof ClassConstFetch && DynamicClassReferencePolicy::allowsObjectClass($node)) {
                 return null;
             }
@@ -103,6 +118,8 @@ final class NamespaceRewriteVisitor extends NodeVisitorAbstract
         if ($node instanceof New_ && $node->class instanceof Name && isset($node->args[0]) && $node->args[0] instanceof Arg) {
             $class = strtolower(ltrim($node->class->toString(), '\\'));
             if (in_array($class, ['reflectionclass', 'reflectionenum'], true)
+                && !DynamicClassReferencePolicy::allowsCalledClassReflection($node)
+                && !DynamicClassReferencePolicy::allowsBoundObjectReflection($node)
                 && !$this->isStaticClassExpression($node->args[0]->value)) {
                 throw new BuildException(
                     "Cannot safely shade dynamic {$node->class->toString()} construction on line {$node->getStartLine()}.",

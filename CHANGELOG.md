@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.12 - 2026-10-13
+
+- Allow only variable class operands of `instanceof`, which perform type checks without autoloading; computed targets remain rejected.
+- Rewrite the exact `Fiber::getCurrent()`, non-null guard and `suspend()` pattern to `\Fiber::suspend()`; other dynamic static calls remain rejected.
+- Rewrite `ReflectionClass($className)` only when the immediately preceding statement assigns that variable from `get_called_class()` inside a non-static closure with a bound object. Also allow `ReflectionClass($this)` where `$this` is available.
+- Keep regression tests for each accepted pattern and for similar unproven patterns that must remain rejected.
+
 ## 1.0.11 - 2026-10-13
 
 - Allow dynamic `is_a()` target types when `allow_string` is omitted and the target is a variable. PHP compares that target without autoloading it; calls with an explicit third argument remain subject to the dynamic-reference guard.

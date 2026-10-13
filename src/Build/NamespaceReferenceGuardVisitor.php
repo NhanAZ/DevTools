@@ -45,6 +45,13 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
         if (($node instanceof New_ || $node instanceof Instanceof_ || $node instanceof StaticCall
             || $node instanceof StaticPropertyFetch || $node instanceof ClassConstFetch)
             && $node->class instanceof Expr) {
+            if ($node instanceof Instanceof_
+                && DynamicClassReferencePolicy::allowsNonAutoloadingInstanceofTarget($node)) {
+                return null;
+            }
+            if ($node instanceof StaticCall && DynamicClassReferencePolicy::allowsCurrentFiberSuspend($node)) {
+                return null;
+            }
             if ($node instanceof ClassConstFetch && DynamicClassReferencePolicy::allowsObjectClass($node)) {
                 return null;
             }
@@ -80,6 +87,8 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
         if ($node instanceof New_ && $node->class instanceof Name && isset($node->args[0]) && $node->args[0] instanceof Arg) {
             $class = strtolower(ltrim($node->class->toString(), '\\'));
             if (in_array($class, ['reflectionclass', 'reflectionenum'], true)
+                && !DynamicClassReferencePolicy::allowsCalledClassReflection($node)
+                && !DynamicClassReferencePolicy::allowsBoundObjectReflection($node)
                 && !$this->isStaticClassExpression($node->args[0]->value)) {
                 throw new BuildException(
                     "Cannot prove that dynamic {$node->class->toString()} construction on line {$node->getStartLine()} is independent of an undeclared virion.",
