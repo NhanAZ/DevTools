@@ -638,6 +638,68 @@ PHP,
         self::assertStringContainsString('$graphic::class', $result);
     }
 
+    public function test_object_class_in_short_circuit_guard_diagnostic_is_allowed(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Translator.php';
+        file_put_contents(
+            $path,
+            <<<'PHP'
+<?php
+namespace Fixture;
+
+use Shared\Virion\Graphic;
+
+final class Translator
+{
+    public function describe(mixed $graphic): void
+    {
+        $graphic instanceof Graphic || throw new \InvalidArgumentException(
+            "Expected " . Graphic::class . ", got " . $graphic::class,
+        );
+    }
+}
+PHP,
+        );
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('Fixture\\Shade\\Shared\\Graphic::class', $result);
+        self::assertStringContainsString('$graphic::class', $result);
+    }
+
+    public function test_object_class_in_short_circuit_guard_for_another_variable_is_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents(
+            $directory . DIRECTORY_SEPARATOR . 'Translator.php',
+            <<<'PHP'
+<?php
+namespace Fixture;
+
+use Shared\Virion\Graphic;
+
+final class Translator
+{
+    public function describe(mixed $graphic, mixed $other): void
+    {
+        $graphic instanceof Graphic || throw new \InvalidArgumentException($other::class);
+    }
+}
+PHP,
+        );
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+    }
+
     public function test_conditional_object_guard_is_rejected(): void
     {
         $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';

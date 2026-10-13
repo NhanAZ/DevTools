@@ -282,7 +282,8 @@ final class DynamicClassReferencePolicy
         }
 
         return self::allowsAnnotated($node, $node->class)
-            || self::hasGuardedObjectClass($node, $node->class);
+            || self::hasGuardedObjectClass($node, $node->class)
+            || self::hasInlineGuardedObjectClass($node, $node->class);
     }
 
     private static function hasGuardedObjectClass(Node $node, Variable $class): bool
@@ -310,6 +311,32 @@ final class DynamicClassReferencePolicy
             && $guard->left->expr instanceof Variable
             && $guard->left->expr->name === $class->name
             && $guard->left->class instanceof Name;
+    }
+
+    /**
+     * Allows an object-class diagnostic inside the right side of the same
+     * short-circuit `instanceof ... || throw` guard. The right side cannot run
+     * after a successful type check, and object-class inspection does not load
+     * or resolve a class-name string for shading.
+     */
+    private static function hasInlineGuardedObjectClass(ClassConstFetch $node, Variable $class): bool
+    {
+        $parent = $node->getAttribute('parent');
+        while ($parent instanceof Node) {
+            if ($parent instanceof BooleanOr) {
+                return $parent->left instanceof Instanceof_
+                    && $parent->right instanceof Throw_
+                    && $parent->left->expr instanceof Variable
+                    && $parent->left->expr->name === $class->name
+                    && $parent->left->class instanceof Name;
+            }
+            if ($parent instanceof FunctionLike) {
+                return false;
+            }
+            $parent = $parent->getAttribute('parent');
+        }
+
+        return false;
     }
 
     private static function variableName(Expr $class): ?string

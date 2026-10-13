@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.13 - 2026-10-14
+
+- Allow object-class diagnostics inside the same short-circuit `instanceof ... || throw` guard when the inspected variable is the guarded operand.
+- Keep dynamic class factories, static calls, computed targets and mismatched guarded variables rejected.
+
 ## 1.0.12 - 2026-10-13
 
 - Allow only variable class operands of `instanceof`, which perform type checks without autoloading; computed targets remain rejected.
