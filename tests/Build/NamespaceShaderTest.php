@@ -253,6 +253,29 @@ PHP);
         (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
     }
 
+    public function test_class_identity_string_with_an_unrelated_namespace_prefix_remains_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'UnsafePackaging.php', <<<'PHP'
+<?php
+namespace Shared\Virion;
+
+final class Packaging
+{
+    public static function detect(): bool
+    {
+        return __CLASS__ !== 'Other\Shared\Virion\Packaging';
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('string literal');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
     public function test_computed_instanceof_target_remains_rejected(): void
     {
         $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
