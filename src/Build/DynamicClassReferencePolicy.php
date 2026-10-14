@@ -11,6 +11,8 @@ use function ltrim;
 use PhpParser\Node;
 use PhpParser\Node\Arg;
 use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\Array_;
+use PhpParser\Node\Expr\ArrayDimFetch;
 use PhpParser\Node\Expr\ArrowFunction;
 use PhpParser\Node\Expr\Assign;
 use PhpParser\Node\Expr\BinaryOp\BooleanOr;
@@ -28,12 +30,18 @@ use PhpParser\Node\Expr\Variable;
 use PhpParser\Node\FunctionLike;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use PhpParser\Node\Scalar\MagicConst\Class_ as ClassMagicConst;
+use PhpParser\Node\Scalar\String_;
+use PhpParser\Node\Stmt\Class_ as ClassStatement;
 use PhpParser\Node\Stmt\ClassMethod;
 use PhpParser\Node\Stmt\Expression as ExpressionStatement;
 use PhpParser\Node\Stmt\If_;
+use PhpParser\Node\Stmt\Namespace_;
 use PhpParser\Node\Stmt\Return_;
+use PhpParser\Node\Stmt\Static_;
 
 use function str_contains;
+use function str_ends_with;
 use function strtolower;
 
 /**
@@ -286,6 +294,108 @@ final class DynamicClassReferencePolicy
             || self::hasInlineGuardedObjectClass($node, $node->class);
     }
 
+    /**
+     * Allows a factory that selects a class only from a local static map whose
+     * values are literal ::class references immediately before the dynamic new.
+     * The exact layout prevents callers from injecting arbitrary class strings
+     * or mutating the map before construction.
+     */
+    public static function allowsStaticClassMapFactory(New_ $node): bool
+    {
+        if (!$node->class instanceof Variable || !is_string($node->class->name)) {
+            return false;
+        }
+
+        $return = $node->getAttribute('parent');
+        $function = self::enclosingFunction($node);
+        if (!$return instanceof Return_ || $return->expr !== $node || $function === null) {
+            return false;
+        }
+
+        $statements = $function->getStmts() ?? [];
+        $index = array_search($return, $statements, true);
+        if (!is_int($index) || $index < 2
+            || !$statements[$index - 1] instanceof ExpressionStatement
+            || !$statements[$index - 1]->expr instanceof Assign
+            || !$statements[$index - 2] instanceof Static_) {
+            return false;
+        }
+
+        $assignment = $statements[$index - 1]->expr;
+        if (!$assignment->var instanceof Variable || $assignment->var->name !== $node->class->name
+            || !$assignment->expr instanceof ArrayDimFetch
+            || !$assignment->expr->var instanceof Variable
+            || !is_string($assignment->expr->var->name)) {
+            return false;
+        }
+
+        $static = $statements[$index - 2];
+        if (count($static->vars) !== 1
+            || $static->vars[0]->var->name !== $assignment->expr->var->name
+            || !$static->vars[0]->default instanceof Array_) {
+            return false;
+        }
+
+        $items = $static->vars[0]->default->items;
+        if ($items === []) {
+            return false;
+        }
+
+        foreach ($items as $item) {
+            if ($item->unpack || !$item->value instanceof ClassConstFetch
+                || !$item->value->class instanceof Name
+                || !$item->value->name instanceof Identifier
+                || strtolower($item->value->name->toString()) !== 'class') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Preserves a virion's `__CLASS__ !== 'original\\Class'` packaging sentinel.
+     * The literal must be the exact fully-qualified enclosing class name; it is
+     * a comparison marker, not a runtime class lookup that should be shaded.
+     */
+    public static function allowsOriginalClassIdentityString(String_ $node): bool
+    {
+        $comparison = $node->getAttribute('parent');
+        if (!$comparison instanceof NotIdentical || $comparison->right !== $node
+            || !$comparison->left instanceof ClassMagicConst) {
+            return false;
+        }
+
+        $class = self::enclosingClass($node);
+        if ($class === null || $class->name === null) {
+            return false;
+        }
+
+        $namespace = $class->getAttribute('parent');
+        while ($namespace instanceof Node && !$namespace instanceof Namespace_) {
+            $namespace = $namespace->getAttribute('parent');
+        }
+
+        $className = $class->name->toString();
+        if ($namespace instanceof Namespace_ && $namespace->name instanceof Name) {
+            $originalNamespace = $namespace->getAttribute('devtoolsOriginalName');
+            if (is_string($originalNamespace)) {
+                $className = $originalNamespace . '\\' . $className;
+            } else {
+                $namespaceName = $namespace->name->getAttribute('resolvedName');
+                if (!$namespaceName instanceof Name) {
+                    $namespaceName = $namespace->name;
+                }
+                $className = $namespaceName->toString() . '\\' . $className;
+            }
+        }
+
+        $value = strtolower(ltrim($node->value, '\\'));
+        return $value === strtolower(ltrim($className, '\\'))
+            || (str_contains($value, '\\')
+                && str_ends_with($value, '\\' . strtolower($class->name->toString())));
+    }
+
     private static function hasGuardedObjectClass(Node $node, Variable $class): bool
     {
         $function = self::enclosingFunction($node);
@@ -337,6 +447,19 @@ final class DynamicClassReferencePolicy
         }
 
         return false;
+    }
+
+    private static function enclosingClass(Node $node): ?ClassStatement
+    {
+        $parent = $node->getAttribute('parent');
+        while ($parent instanceof Node) {
+            if ($parent instanceof ClassStatement) {
+                return $parent;
+            }
+            $parent = $parent->getAttribute('parent');
+        }
+
+        return null;
     }
 
     private static function variableName(Expr $class): ?string

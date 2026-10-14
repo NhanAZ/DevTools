@@ -34,7 +34,9 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
             $candidate = $resolved instanceof Name ? $resolved->toString() : $node->toString();
             $this->assertValueIsStandalone($candidate, $node->getStartLine());
         } elseif ($node instanceof String_ || $node instanceof InterpolatedStringPart) {
-            $this->assertValueIsStandalone($node->value, $node->getStartLine());
+            if (!$node instanceof String_ || !DynamicClassReferencePolicy::allowsOriginalClassIdentityString($node)) {
+                $this->assertValueIsStandalone($node->value, $node->getStartLine());
+            }
         } elseif ($node instanceof Concat) {
             $value = $this->staticString($node);
             if ($value !== null) {
@@ -56,6 +58,9 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
                 return null;
             }
             if ($node instanceof New_ && DynamicClassReferencePolicy::allowsGuarded($node, $node->class)) {
+                return null;
+            }
+            if ($node instanceof New_ && DynamicClassReferencePolicy::allowsStaticClassMapFactory($node)) {
                 return null;
             }
             throw new BuildException(

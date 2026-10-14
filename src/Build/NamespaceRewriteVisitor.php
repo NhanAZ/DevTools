@@ -47,12 +47,14 @@ final class NamespaceRewriteVisitor extends NodeVisitorAbstract
         }
 
         if ($node instanceof String_ || $node instanceof InterpolatedStringPart) {
-            foreach ($this->replacements as $original => $replacement) {
-                if ($this->containsNamespace($node->value, $original)) {
-                    throw new BuildException(
-                        "Cannot safely shade namespace {$original}: it appears in a PHP string literal on line {$node->getStartLine()}. "
-                        . 'Replace dynamic class-name strings with static ::class references or exclude this virion.',
-                    );
+            if (!$node instanceof String_ || !DynamicClassReferencePolicy::allowsOriginalClassIdentityString($node)) {
+                foreach ($this->replacements as $original => $replacement) {
+                    if ($this->containsNamespace($node->value, $original)) {
+                        throw new BuildException(
+                            "Cannot safely shade namespace {$original}: it appears in a PHP string literal on line {$node->getStartLine()}. "
+                            . 'Replace dynamic class-name strings with static ::class references or exclude this virion.',
+                        );
+                    }
                 }
             }
 
@@ -87,6 +89,9 @@ final class NamespaceRewriteVisitor extends NodeVisitorAbstract
                 return null;
             }
             if ($node instanceof New_ && DynamicClassReferencePolicy::allowsGuarded($node, $node->class)) {
+                return null;
+            }
+            if ($node instanceof New_ && DynamicClassReferencePolicy::allowsStaticClassMapFactory($node)) {
                 return null;
             }
             throw new BuildException(
@@ -158,6 +163,9 @@ final class NamespaceRewriteVisitor extends NodeVisitorAbstract
         }
 
         if ($isDeclarationOrImport) {
+            if ($parent instanceof Namespace_) {
+                $parent->setAttribute('devtoolsOriginalName', $node->toString());
+            }
             return new Name($replacement, $node->getAttributes());
         }
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.14 - 2026-10-14
+
+- Allow dynamic construction from a local static class map whose values are explicit `::class` references immediately selected by the factory.
+- Preserve exact `__CLASS__ !== 'original\\Class'` packaging sentinels used to detect namespace shading while continuing to reject unrelated identity strings.
+- Keep mutable, runtime-supplied and otherwise unproven dynamic class maps rejected.
+
 ## 1.0.13 - 2026-10-14
 
 - Allow object-class diagnostics inside the same short-circuit `instanceof ... || throw` guard when the inspected variable is the guarded operand.

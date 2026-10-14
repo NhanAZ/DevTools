@@ -134,6 +134,125 @@ PHP);
         self::assertSame([], $autoloaded);
     }
 
+    public function test_static_class_map_factory_is_allowed_and_static_values_are_shaded(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Factory.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+namespace Fixture;
+
+use Shared\Virion\SqlDialect;
+use Shared\Virion\MysqlStatement;
+use Shared\Virion\SqliteStatement;
+
+final class Factory
+{
+    public static function create(string $dialect): object
+    {
+        static $classMap = [
+            SqlDialect::MYSQL => MysqlStatement::class,
+            SqlDialect::SQLITE => SqliteStatement::class,
+        ];
+        $className = $classMap[$dialect];
+        return new $className();
+    }
+}
+PHP);
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString('return new $className()', $result);
+        self::assertStringNotContainsString('Shared\\Virion', $result);
+        self::assertStringContainsString('Fixture\\Shade\\Shared\\MysqlStatement::class', $result);
+        self::assertStringContainsString('Fixture\\Shade\\Shared\\SqliteStatement::class', $result);
+    }
+
+    public function test_dynamic_class_map_value_remains_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'UnsafeFactory.php', <<<'PHP'
+<?php
+namespace Fixture;
+
+final class UnsafeFactory
+{
+    public static function create(string $dialect, string $className): object
+    {
+        static $classMap = [
+            'safe' => $className,
+        ];
+        $selected = $classMap[$dialect];
+        return new $selected();
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic class reference');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
+    public function test_original_class_identity_sentinel_is_preserved(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . DIRECTORY_SEPARATOR . 'Packaging.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+namespace Shared\Virion;
+
+final class Packaging
+{
+    private static bool $packaged;
+
+    public static function detect(): void
+    {
+        self::$packaged = __CLASS__ !== 'Shared\Virion\Packaging';
+    }
+}
+PHP);
+
+        $shader = new NamespaceShader();
+        $shader->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertStringContainsString("'Shared\\Virion\\Packaging'", $result);
+        self::assertStringContainsString('namespace Fixture\\Shade\\Shared;', $result);
+    }
+
+    public function test_unrelated_class_identity_string_remains_rejected(): void
+    {
+        $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . DIRECTORY_SEPARATOR . 'UnsafePackaging.php', <<<'PHP'
+<?php
+namespace Shared\Virion;
+
+final class UnsafePackaging
+{
+    public static function detect(): bool
+    {
+        return __CLASS__ !== 'Shared\Virion\Other';
+    }
+}
+PHP);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('string literal');
+
+        (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
+    }
+
     public function test_computed_instanceof_target_remains_rejected(): void
     {
         $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';
