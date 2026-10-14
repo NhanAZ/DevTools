@@ -41,8 +41,10 @@ use PhpParser\Node\Stmt\Return_;
 use PhpParser\Node\Stmt\Static_;
 
 use function str_contains;
-use function str_ends_with;
+use function str_starts_with;
+use function strlen;
 use function strtolower;
+use function substr;
 
 /**
  * Allows only explicitly annotated and validated runtime class factories.
@@ -357,8 +359,9 @@ final class DynamicClassReferencePolicy
      * Preserves a virion's `__CLASS__ !== 'original\\Class'` packaging sentinel.
      * The literal must be the exact fully-qualified enclosing class name; it is
      * a comparison marker, not a runtime class lookup that should be shaded.
+     * @param array<string, string> $shadedNamespaces Original namespace => shaded namespace.
      */
-    public static function allowsOriginalClassIdentityString(String_ $node): bool
+    public static function allowsOriginalClassIdentityString(String_ $node, array $shadedNamespaces = []): bool
     {
         $comparison = $node->getAttribute('parent');
         if (!$comparison instanceof NotIdentical || $comparison->right !== $node
@@ -376,24 +379,43 @@ final class DynamicClassReferencePolicy
             $namespace = $namespace->getAttribute('parent');
         }
 
-        $className = $class->name->toString();
+        $classNamespace = '';
         if ($namespace instanceof Namespace_ && $namespace->name instanceof Name) {
             $originalNamespace = $namespace->getAttribute('devtoolsOriginalName');
             if (is_string($originalNamespace)) {
-                $className = $originalNamespace . '\\' . $className;
+                $classNamespace = $originalNamespace;
             } else {
                 $namespaceName = $namespace->name->getAttribute('resolvedName');
                 if (!$namespaceName instanceof Name) {
                     $namespaceName = $namespace->name;
                 }
-                $className = $namespaceName->toString() . '\\' . $className;
+                $currentNamespace = $namespaceName->toString();
+                $classNamespace = $currentNamespace;
+                $longestMatch = 0;
+                foreach ($shadedNamespaces as $original => $shaded) {
+                    $shaded = ltrim($shaded, '\\');
+                    $normalizedShaded = strtolower($shaded);
+                    $normalizedCurrent = strtolower(ltrim($currentNamespace, '\\'));
+                    if ($normalizedCurrent !== $normalizedShaded
+                        && !str_starts_with($normalizedCurrent, $normalizedShaded . '\\')) {
+                        continue;
+                    }
+                    $matchLength = strlen($shaded);
+                    if ($matchLength <= $longestMatch) {
+                        continue;
+                    }
+                    $suffix = substr(ltrim($currentNamespace, '\\'), $matchLength);
+                    $classNamespace = ltrim($original, '\\') . $suffix;
+                    $longestMatch = $matchLength;
+                }
             }
         }
 
-        $value = strtolower(ltrim($node->value, '\\'));
-        return $value === strtolower(ltrim($className, '\\'))
-            || (str_contains($value, '\\')
-                && str_ends_with($value, '\\' . strtolower($class->name->toString())));
+        $className = $classNamespace === ''
+            ? $class->name->toString()
+            : $classNamespace . '\\' . $class->name->toString();
+
+        return $node->value === $className;
     }
 
     private static function hasGuardedObjectClass(Node $node, Variable $class): bool

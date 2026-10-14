@@ -58,9 +58,15 @@ final class NamespaceShader
         }
     }
 
-    /** @param list<string> $namespaces */
-    public function assertNoNamespaceReferences(string $directory, array $namespaces): void
-    {
+    /**
+     * @param list<string> $namespaces
+     * @param array<string, string> $shadedNamespaces Original namespace => shaded namespace.
+     */
+    public function assertNoNamespaceReferences(
+        string $directory,
+        array $namespaces,
+        array $shadedNamespaces = [],
+    ): void {
         if ($namespaces === []) {
             return;
         }
@@ -86,7 +92,7 @@ final class NamespaceShader
                 $traverser = new NodeTraverser();
                 $traverser->addVisitor(new ParentConnectingVisitor());
                 $traverser->addVisitor(new NameResolver(null, ['replaceNodes' => false, 'preserveOriginalNames' => true]));
-                $traverser->addVisitor(new NamespaceReferenceGuardVisitor($namespaces));
+                $traverser->addVisitor(new NamespaceReferenceGuardVisitor($namespaces, $shadedNamespaces));
                 $traverser->traverse($statements);
             } catch (BuildException $error) {
                 throw new BuildException("Standalone validation failed for {$entry->getPathname()}: {$error->getMessage()}", 0, $error);

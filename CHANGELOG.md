@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.15 - 2026-10-14
+
+- Require a packaging identity string compared with `__CLASS__` to exactly match the original enclosing class name. This prevents an unrelated namespace prefix from bypassing the standalone namespace reference guard.
+- Preserve exact identity sentinels through post-shading validation by resolving shaded namespaces back to their original names.
+- Add regression coverage for unrelated namespace prefixes and case-mismatched identity strings.
+
 ## 1.0.14 - 2026-10-14
 
 - Allow dynamic construction from a local static class map whose values are explicit `::class` references immediately selected by the factory.

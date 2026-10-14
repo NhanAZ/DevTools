@@ -24,8 +24,14 @@ use function strpos;
 
 final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
 {
-    /** @param list<string> $namespaces */
-    public function __construct(private readonly array $namespaces) {}
+    /**
+     * @param list<string> $namespaces
+     * @param array<string, string> $shadedNamespaces Original namespace => shaded namespace.
+     */
+    public function __construct(
+        private readonly array $namespaces,
+        private readonly array $shadedNamespaces = [],
+    ) {}
 
     public function enterNode(Node $node): ?Node
     {
@@ -34,7 +40,8 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
             $candidate = $resolved instanceof Name ? $resolved->toString() : $node->toString();
             $this->assertValueIsStandalone($candidate, $node->getStartLine());
         } elseif ($node instanceof String_ || $node instanceof InterpolatedStringPart) {
-            if (!$node instanceof String_ || !DynamicClassReferencePolicy::allowsOriginalClassIdentityString($node)) {
+            if (!$node instanceof String_
+                || !DynamicClassReferencePolicy::allowsOriginalClassIdentityString($node, $this->shadedNamespaces)) {
                 $this->assertValueIsStandalone($node->value, $node->getStartLine());
             }
         } elseif ($node instanceof Concat) {

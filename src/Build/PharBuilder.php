@@ -131,7 +131,7 @@ final class PharBuilder
             $this->stagePlugin($projectRoot, $stage, $config, $realOutput);
             $shaded = $this->stageVirions($virions, $manifest, $stage);
             $this->namespaceShader->shadeDirectory($stage, $shaded);
-            $this->namespaceShader->assertNoNamespaceReferences($stage, $forbiddenStandaloneNamespaces);
+            $this->namespaceShader->assertNoNamespaceReferences($stage, $forbiddenStandaloneNamespaces, $shaded);
             $fileCount = $this->countFiles($stage);
             $this->writePhar($stage, $temporaryPhar);
             $this->validatePhar($temporaryPhar, $manifest, $shaded);
