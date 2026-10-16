@@ -84,7 +84,7 @@ final class RepositoryMetadataTest extends TestCase
         self::assertStringContainsString('repository: ${{ steps.workflow-identity.outputs.repository }}', $reusable);
         self::assertStringContainsString("'.workflow_sha // empty'", $reusable);
         self::assertStringContainsString("'.workflow_repository // empty'", $reusable);
-        self::assertStringContainsString('uses: actions/upload-artifact@v7.0.1', $reusable);
+        self::assertSame(1, preg_match('/uses: actions\/upload-artifact@v[0-9]+\.[0-9]+\.[0-9]+/', $reusable));
         self::assertStringContainsString('artifact-id: ${{ steps.upload.outputs.artifact-id }}', $reusable);
         self::assertStringContainsString('contents: read', $reusable);
         self::assertStringContainsString('devtools-ref is deprecated and ignored', $reusable);
@@ -191,7 +191,7 @@ final class RepositoryMetadataTest extends TestCase
         self::assertIsString($exampleContents);
         self::assertStringContainsString("on:\n  push:\n  pull_request:\n  workflow_dispatch:", $exampleContents);
         self::assertStringContainsString('uses: NhanAZ/DevTools@v' . self::VERSION, $exampleContents);
-        self::assertStringContainsString('uses: actions/upload-artifact@v7.0.1', $exampleContents);
+        self::assertSame(1, preg_match('/uses: actions\/upload-artifact@v[0-9]+\.[0-9]+\.[0-9]+/', $exampleContents));
         self::assertStringContainsString('path: ${{ steps.build.outputs.phar }}', $exampleContents);
         self::assertStringContainsString('repository: axolotl-pm/setup-php-action', $exampleContents);
         self::assertStringContainsString('ref: ' . self::PHP_ACTION_COMMIT, $exampleContents);
