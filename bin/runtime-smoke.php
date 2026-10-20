@@ -72,7 +72,7 @@ function smokeVirion(string $root, string $version): void
 try {
     $root = dirname(__DIR__);
     $server = null;
-    foreach (array_slice($argv, 1) as $argument) {
+    foreach (array_slice($argv ?? [], 1) as $argument) {
         if (str_starts_with($argument, '--server=')) {
             $server = realpath(substr($argument, 9));
         } elseif ($argument === '--help') {

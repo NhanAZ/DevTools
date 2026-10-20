@@ -48,10 +48,10 @@ try {
         new ArtifactInspector($reader),
         new ComposerVirionPreparer($filesystem),
     );
-    exit($application->run(array_slice($argv, 1)));
+    exit($application->run(array_slice($argv ?? [], 1)));
 } catch (Throwable $error) {
     $message = $error->getMessage();
-    if (in_array('--json', $argv, true)) {
+    if (in_array('--json', $argv ?? [], true)) {
         fwrite(STDOUT, json_encode([
             'schema_version' => 1, 'success' => false, 'command' => 'bootstrap',
             'tool' => ['name' => 'DevTools', 'version' => null], 'data' => (object) [],

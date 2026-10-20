@@ -10,7 +10,7 @@ if ($cwd === false) {
 }
 $legacyDefaults = ['project' => $root, 'out' => $root . '/build', 'virions' => dirname($root, 2) . '/virions'];
 $arguments = [];
-foreach (array_slice($argv, 1) as $argument) {
+foreach (array_slice($argv ?? [], 1) as $argument) {
     if (preg_match('/^--(project|out|virions)=(.+)$/Ds', $argument, $match) === 1) {
         $path = $match[2];
         if (!str_starts_with($path, '/') && !str_starts_with($path, '\\') && preg_match('/^[A-Za-z]:[\\\\\/]/', $path) !== 1) {

@@ -17,7 +17,7 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 
 $options = [];
 $scanPaths = [];
-foreach (array_slice($argv, 1) as $argument) {
+foreach (array_slice($argv ?? [], 1) as $argument) {
     if (preg_match('/^--([a-z-]+)=(.*)$/D', $argument, $matches) !== 1) {
         fwrite(STDERR, "Unknown argument: {$argument}\n");
         exit(2);
