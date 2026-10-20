@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NhanAZ\DevTools\Virion;
 
 use FilesystemIterator;
+use NhanAZ\DevTools\Support\Filesystem;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 use SplFileInfo;
@@ -13,12 +14,19 @@ final class VirionSourceFingerprint
 {
     public function hash(string $source): string
     {
+        if (Filesystem::isLink($source)) {
+            throw new VirionException("Refusing symbolic link in prepared source {$source}.");
+        }
         $files = [];
-        foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS)) as $entry) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($source, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST,
+        );
+        foreach ($iterator as $entry) {
             if (!$entry instanceof SplFileInfo) {
                 continue;
             }
-            if ($entry->isLink()) {
+            if ($entry->isLink() || Filesystem::isLink($entry->getPathname())) {
                 throw new VirionException("Refusing symbolic link in prepared source {$entry->getPathname()}.");
             }
             if ($entry->isFile()) {

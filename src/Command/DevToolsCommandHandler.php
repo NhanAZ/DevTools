@@ -21,7 +21,6 @@ use NhanAZ\DevTools\Support\Path;
 use NhanAZ\DevTools\Validation\PluginManifestReader;
 use NhanAZ\DevTools\Validation\PluginProjectValidator;
 use NhanAZ\DevTools\Virion\VirionRegistry;
-use NhanAZ\DevTools\Virion\VirionStatus;
 use pocketmine\command\CommandSender;
 use pocketmine\plugin\Plugin;
 
@@ -54,7 +53,7 @@ final class DevToolsCommandHandler
     /** @param list<string> $arguments */
     public function handle(CommandSender $sender, string $label, array $arguments): bool
     {
-        $label = strtolower($label);
+        $label = strtolower(explode(':', $label, 2)[1] ?? $label);
         if ($label === 'makeplugin') {
             array_unshift($arguments, 'build');
         } elseif ($label === 'extractplugin') {

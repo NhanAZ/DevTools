@@ -162,6 +162,21 @@ final class VirionManagerTest extends TestCase
         self::assertStringContainsString('expected source file', $registry->entries()[0]->message);
     }
 
+    public function test_file_in_class_path_is_reported_without_warnings(): void
+    {
+        $project = $this->copyFixture('SharedVirion', 'virions/WrongPath');
+        file_put_contents($project . '/src/Shared/Virion/Other.php', '<?php namespace Shared\\Virion\\Nested; final class Other {}');
+        file_put_contents($project . '/src/Shared/Virion/Nested', 'not a directory');
+        $registry = new VirionRegistry();
+        $registrar = new FakeClassLoaderRegistrar();
+
+        $this->manager($registrar, $registry)->discoverAndLoad($this->temporaryDirectory . '/virions');
+
+        self::assertSame([], $registrar->registrations);
+        self::assertSame(VirionStatus::FAILED, $registry->entries()[0]->status);
+        self::assertStringContainsString('expected source file', $registry->entries()[0]->message);
+    }
+
     public function test_php_compatibility_list_is_preserved_and_enforced(): void
     {
         $virions = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'virions';

@@ -9,7 +9,6 @@ use function array_map;
 use function count;
 use function implode;
 use function usort;
-use function version_compare;
 
 final class VirionProjectSelector
 {
@@ -44,7 +43,7 @@ final class VirionProjectSelector
 
         usort(
             $compatible,
-            static fn(VirionProject $left, VirionProject $right): int => version_compare(
+            static fn(VirionProject $left, VirionProject $right): int => VirionVersionConstraint::compareVersions(
                 $right->manifest->version,
                 $left->manifest->version,
             ),
@@ -52,11 +51,10 @@ final class VirionProjectSelector
         $selected = $compatible[0];
         $sameVersion = array_filter(
             $compatible,
-            static fn(VirionProject $project): bool => version_compare(
+            static fn(VirionProject $project): bool => VirionVersionConstraint::compareVersions(
                 $project->manifest->version,
                 $selected->manifest->version,
-                '=',
-            ),
+            ) === 0,
         );
         if (count($sameVersion) > 1) {
             $locations = implode(', ', array_map(

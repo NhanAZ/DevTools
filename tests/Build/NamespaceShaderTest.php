@@ -50,6 +50,62 @@ PHP;
         (new NamespaceShader())->shadeDirectory($directory, ['Shared\Virion' => 'Fixture\Shade\Shared']);
     }
 
+    /** @dataProvider hiddenDynamicReferenceProvider */
+    public function test_aliased_and_named_dynamic_class_references_are_rejected(string $source, bool $shade): void
+    {
+        $directory = $this->temporaryDirectory . '/src';
+        $this->filesystem->ensureDirectory($directory);
+        file_put_contents($directory . '/Unsafe.php', "<?php\nnamespace Fixture;\n" . $source);
+
+        $this->expectException(BuildException::class);
+        $this->expectExceptionMessage('dynamic');
+
+        $shader = new NamespaceShader();
+        if ($shade) {
+            $shader->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+        } else {
+            $shader->assertNoNamespaceReferences($directory, ['Shared\\Virion']);
+        }
+    }
+
+    /** @return iterable<string, array{string, bool}> */
+    public static function hiddenDynamicReferenceProvider(): iterable
+    {
+        $sources = [
+            'aliased function' => 'use function class_exists as exists; exists($className);',
+            'aliased reflection' => 'use ReflectionClass as ClassInfo; new ClassInfo($className);',
+            'named target' => 'is_subclass_of(class: $className, object_or_class: \stdClass::class);',
+            'unpacked arguments' => 'is_subclass_of(...$arguments);',
+        ];
+        foreach ($sources as $name => $source) {
+            yield $name . ' shading' => [$source, true];
+            yield $name . ' standalone' => [$source, false];
+        }
+    }
+
+    public function test_named_static_class_arguments_and_aliased_non_autoloading_check_are_allowed(): void
+    {
+        $directory = $this->temporaryDirectory . '/src';
+        $this->filesystem->ensureDirectory($directory);
+        $path = $directory . '/References.php';
+        file_put_contents($path, <<<'PHP'
+<?php
+namespace Fixture;
+use function is_a as matches;
+class_exists(autoload: false, class: \Shared\Virion\Greeting::class);
+is_subclass_of(class: \Shared\Virion\Greeting::class, object_or_class: $value);
+matches(class: $className, object_or_class: $value);
+PHP);
+        $shader = new NamespaceShader();
+
+        $shader->shadeDirectory($directory, ['Shared\\Virion' => 'Fixture\\Shade\\Shared']);
+        $shader->assertNoNamespaceReferences($directory, ['Shared\\Virion']);
+
+        $result = file_get_contents($path);
+        self::assertIsString($result);
+        self::assertSame(2, substr_count($result, '\\Fixture\\Shade\\Shared\\Greeting::class'));
+    }
+
     public function test_dynamic_is_a_target_type_is_allowed_with_default_non_autoloading_mode(): void
     {
         $directory = $this->temporaryDirectory . DIRECTORY_SEPARATOR . 'src';

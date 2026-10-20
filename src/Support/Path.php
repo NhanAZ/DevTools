@@ -63,7 +63,7 @@ final class Path
             if ($component === '..') {
                 throw new FilesystemException("The path escapes its destination: {$path}");
             }
-            if (preg_match('/[<>:"|?*]/', $component) === 1 || preg_match('/[. ]$/', $component) === 1) {
+            if (preg_match('/[\x00-\x1f<>:"|?*]/', $component) === 1 || preg_match('/[. ]$/', $component) === 1) {
                 throw new FilesystemException("The path is not portable across supported filesystems: {$path}");
             }
             $device = strtolower(explode('.', $component, 2)[0]);

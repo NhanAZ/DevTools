@@ -70,7 +70,7 @@ try {
 
     $outputDirectory = dirname($options['out']);
     $filesystem->ensureDirectory($outputDirectory);
-    if (is_link($options['out'])) {
+    if (Filesystem::isLink($options['out'])) {
         throw new RuntimeException("Refusing symbolic-link PHPStan configuration output: {$options['out']}");
     }
     $written = file_put_contents($options['out'], $contents);

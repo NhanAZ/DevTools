@@ -76,19 +76,12 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
         }
 
         if ($node instanceof FuncCall && $node->name instanceof Name) {
-            $function = strtolower(ltrim($node->name->toString(), '\\'));
-            $arguments = match ($function) {
-                'class_alias' => [0, 1],
-                'class_exists', 'interface_exists', 'trait_exists', 'enum_exists' => [0],
-                'is_a', 'is_subclass_of' => [1],
-                default => [],
-            };
-            foreach ($arguments as $argument) {
-                if (isset($node->args[$argument]) && $node->args[$argument] instanceof Arg
-                    && !$this->isStaticClassExpression($node->args[$argument]->value)
+            $function = DynamicClassReferencePolicy::resolvedName($node->name);
+            foreach (DynamicClassReferencePolicy::classNameArguments($node) as $argument) {
+                if ($argument->unpack || (!$this->isStaticClassExpression($argument->value)
                     && !($function === 'is_a' && DynamicClassReferencePolicy::allowsNonAutoloadingIsATypeArgument($node))
                     && !($function === 'class_exists'
-                        && DynamicClassReferencePolicy::allowsAnnotated($node, $node->args[$argument]->value))) {
+                        && DynamicClassReferencePolicy::allowsAnnotated($node, $argument->value)))) {
                     throw new BuildException(
                         "Cannot prove that dynamic class-name argument to {$function}() on line {$node->getStartLine()} is independent of an undeclared virion.",
                     );
@@ -97,7 +90,7 @@ final class NamespaceReferenceGuardVisitor extends NodeVisitorAbstract
         }
 
         if ($node instanceof New_ && $node->class instanceof Name && isset($node->args[0]) && $node->args[0] instanceof Arg) {
-            $class = strtolower(ltrim($node->class->toString(), '\\'));
+            $class = DynamicClassReferencePolicy::resolvedName($node->class);
             if (in_array($class, ['reflectionclass', 'reflectionenum'], true)
                 && !DynamicClassReferencePolicy::allowsCalledClassReflection($node)
                 && !DynamicClassReferencePolicy::allowsBoundObjectReflection($node)

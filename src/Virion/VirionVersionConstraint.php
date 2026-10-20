@@ -7,11 +7,9 @@ namespace NhanAZ\DevTools\Virion;
 use function explode;
 use function preg_match;
 use function preg_split;
-use function sprintf;
 use function str_contains;
 use function strtolower;
 use function trim;
-use function version_compare;
 
 final class VirionVersionConstraint
 {
@@ -62,6 +60,46 @@ final class VirionVersionConstraint
         return true;
     }
 
+    public static function compareVersions(string $left, string $right): int
+    {
+        $leftParts = explode('-', explode('+', $left, 2)[0], 2);
+        $rightParts = explode('-', explode('+', $right, 2)[0], 2);
+        $rightCore = explode('.', $rightParts[0]);
+        foreach (explode('.', $leftParts[0]) as $index => $number) {
+            $comparison = self::compareNumbers($number, $rightCore[$index]);
+            if ($comparison !== 0) {
+                return $comparison;
+            }
+        }
+        if (!isset($leftParts[1]) || !isset($rightParts[1])) {
+            return isset($rightParts[1]) <=> isset($leftParts[1]);
+        }
+        $leftIdentifiers = explode('.', $leftParts[1]);
+        $rightIdentifiers = explode('.', $rightParts[1]);
+        foreach ($leftIdentifiers as $index => $identifier) {
+            if (!isset($rightIdentifiers[$index])) {
+                return 1;
+            }
+            $other = $rightIdentifiers[$index];
+            $leftNumeric = preg_match('/^[0-9]+$/D', $identifier) === 1;
+            $rightNumeric = preg_match('/^[0-9]+$/D', $other) === 1;
+            $comparison = $leftNumeric && $rightNumeric
+                ? self::compareNumbers($identifier, $other)
+                : ($leftNumeric !== $rightNumeric ? $rightNumeric <=> $leftNumeric : strcmp($identifier, $other) <=> 0);
+            if ($comparison !== 0) {
+                return $comparison;
+            }
+        }
+        return count($leftIdentifiers) <=> count($rightIdentifiers);
+    }
+
+    private static function compareNumbers(string $left, string $right): int
+    {
+        $left = ltrim($left, '0') ?: '0';
+        $right = ltrim($right, '0') ?: '0';
+        return (strlen($left) <=> strlen($right)) ?: (strcmp($left, $right) <=> 0);
+    }
+
     private function isValidToken(string $token): bool
     {
         if (str_contains(strtolower($token), '0.0.0-commit.')) {
@@ -83,13 +121,13 @@ final class VirionVersionConstraint
         }
         if (preg_match('/^(?<major>0|[1-9][0-9]*)\.\*$/D', $token, $match) === 1) {
             $minimum = $match['major'] . '.0.0';
-            $maximum = sprintf('%d.0.0', (int) $match['major'] + 1);
+            $maximum = self::increment($match['major']) . '.0.0';
 
             return $this->between($version, $minimum, $maximum);
         }
         if (preg_match('/^(?<major>0|[1-9][0-9]*)\.(?<minor>0|[1-9][0-9]*)\.\*$/D', $token, $match) === 1) {
             $minimum = $match['major'] . '.' . $match['minor'] . '.0';
-            $maximum = sprintf('%d.%d.0', (int) $match['major'], (int) $match['minor'] + 1);
+            $maximum = $match['major'] . '.' . self::increment($match['minor']) . '.0';
 
             return $this->between($version, $minimum, $maximum);
         }
@@ -97,43 +135,55 @@ final class VirionVersionConstraint
             $minimum = substr($token, 1);
             [$major, $minor, $patch] = $this->numericParts($minimum);
             if ($token[0] === '~') {
-                $maximum = sprintf('%d.%d.0', $major, $minor + 1);
-            } elseif ($major > 0) {
-                $maximum = sprintf('%d.0.0', $major + 1);
-            } elseif ($minor > 0) {
-                $maximum = sprintf('0.%d.0', $minor + 1);
+                $maximum = $major . '.' . self::increment($minor) . '.0';
+            } elseif ($major !== '0') {
+                $maximum = self::increment($major) . '.0.0';
+            } elseif ($minor !== '0') {
+                $maximum = '0.' . self::increment($minor) . '.0';
             } else {
-                $maximum = sprintf('0.0.%d', $patch + 1);
+                $maximum = '0.0.' . self::increment($patch);
             }
 
             return $this->between($version, $minimum, $maximum);
         }
         if (preg_match('/^(?<operator><=|>=|<|>|=)(?<version>.+)$/D', $token, $match) === 1) {
-            return version_compare($this->comparable($version), $this->comparable($match['version']), $match['operator']);
+            $comparison = self::compareVersions($version, $match['version']);
+            return match ($match['operator']) {
+                '<' => $comparison < 0,
+                '<=' => $comparison <= 0,
+                '>' => $comparison > 0,
+                '>=' => $comparison >= 0,
+                '=' => $comparison === 0,
+            };
         }
 
-        return version_compare($this->comparable($version), $this->comparable($token), '=');
+        return self::compareVersions($version, $token) === 0;
     }
 
     private function between(string $version, string $minimum, string $maximum): bool
     {
-        $version = $this->comparable($version);
-
-        return version_compare($version, $this->comparable($minimum), '>=')
-            && version_compare($version, $this->comparable($maximum), '<');
+        return self::compareVersions($version, $minimum) >= 0
+            && self::compareVersions($version, $maximum) < 0;
     }
 
-    /** @return array{int, int, int} */
+    /** @return array{string, string, string} */
     private function numericParts(string $version): array
     {
         $core = explode('-', explode('+', $version, 2)[0], 2)[0];
         [$major, $minor, $patch] = explode('.', $core);
 
-        return [(int) $major, (int) $minor, (int) $patch];
+        return [$major, $minor, $patch];
     }
 
-    private function comparable(string $version): string
+    private static function increment(string $number): string
     {
-        return explode('+', $version, 2)[0];
+        for ($index = strlen($number) - 1; $index >= 0; --$index) {
+            if ($number[$index] !== '9') {
+                $number[$index] = (string) ((int) $number[$index] + 1);
+                return $number;
+            }
+            $number[$index] = '0';
+        }
+        return '1' . $number;
     }
 }

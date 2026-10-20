@@ -23,7 +23,17 @@ Before installing output, DevTools validates the plugin manifest and main class,
 
 The default package includes `plugin.yml`, `src/`, `resources/`, common license and notice files, declared virions, and explicit `include-paths`. It excludes `.git`, `.github`, IDE files, tests, caches, logs, `build/`, ordinary development `vendor/`, temporary files, and undeclared project files.
 
-Builds fail rather than guessing when PHP code constructs dynamic virion class names, stores affected namespaces in strings, uses ambiguous grouped imports, references undeclared development namespaces, or retains a manifest dependency on DevTools or DEVirion. A variable used as the second argument to the global `is_a()` function is allowed when the call has exactly two arguments; PHP's default `allow_string` value is false, so the type name is only used for matching. Calls that provide the third argument remain subject to the dynamic-reference guard. A runtime class factory may opt in only with a `@devtools-allow-dynamic-class $variable` method annotation. A direct top-level `return new $variable()` must immediately follow two top-level throwing guards: `if (!class_exists($variable)) { throw ...; }` and `if (!is_subclass_of($variable, Interface::class)) { throw ...; }`. Checks inside optional branches or a class name reassigned after validation do not prove safety. A factory may also construct from a local static map whose values are explicit `::class` references when the map is selected immediately before the return; mutable or runtime-supplied maps remain rejected. The same annotation may allow an object-class expression such as `match ($object::class)` or `$object::class` in an error message; it does not allow dynamic static operations. Without that annotation, DevTools accepts `return $object::class` only when the immediately preceding top-level statement in the same function is `$object instanceof StaticClass || throw ...`. Packaging sentinels using the exact `__CLASS__ !== 'original\\Class'` form are preserved for namespace-shading checks, while unrelated identity strings remain errors. A conditional guard or a reassignment between the guard and return does not prove the object type and is rejected. Other unannotated dynamic references remain build errors.
+Builds reject unsafe dynamic class references, affected namespaces stored in strings, ambiguous grouped imports, undeclared development namespaces, and manifest dependencies on DevTools or DEVirion.
+
+The shader accepts specific dynamic patterns whose behavior it can verify:
+
+- The variable target type in a two-argument global `is_a()` call. Supplying a third argument keeps the call subject to the dynamic-reference guard.
+- A factory annotated with `@devtools-allow-dynamic-class $variable`, where `return new $variable()` immediately follows top-level throwing `class_exists()` and `is_subclass_of(..., Interface::class)` guards. An annotated factory may also select from a local static map of explicit `::class` values immediately before returning.
+- Annotated object-class expressions such as `match ($object::class)` or an error message containing `$object::class`. The annotation does not permit dynamic static operations.
+- Unannotated `return $object::class` immediately after `$object instanceof StaticClass || throw ...` in the same function.
+- Packaging sentinels in the exact form `__CLASS__ !== 'original\\Class'`.
+
+Conditional guards, reassignment after validation, mutable class maps, and unrelated class-name strings do not satisfy these rules. Successful dependency preparation alone does not prove that source can be shaded.
 
 ## Building DevTools from source
 
@@ -50,8 +60,11 @@ DevTools currently has no declared runtime virions. Its self-build therefore ign
 Use the release checksum to verify a download.
 
 ```text
-# Linux and macOS (run beside the downloaded release assets)
+# Linux (run beside the downloaded release assets)
 sha256sum -c SHA256SUMS.txt
+
+# macOS
+shasum -a 256 -c SHA256SUMS.txt
 
 # Windows PowerShell
 Get-FileHash .\DevTools-<version>.phar -Algorithm SHA256

@@ -35,7 +35,9 @@ if (!is_array($manifest)) {
 }
 $expectedVersion = $argv[2] ?? null;
 if (is_string($expectedVersion)) {
-    $expectedVersion = ltrim($expectedVersion, 'v');
+    if (str_starts_with($expectedVersion, 'v')) {
+        $expectedVersion = substr($expectedVersion, 1);
+    }
     if (($manifest['version'] ?? null) !== $expectedVersion) {
         artifactFailure("plugin.yml version does not match {$expectedVersion}");
     }

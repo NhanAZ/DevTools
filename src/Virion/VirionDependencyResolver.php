@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace NhanAZ\DevTools\Virion;
 
+use NhanAZ\DevTools\Support\Filesystem;
+
 final class VirionDependencyResolver
 {
     public function __construct(private readonly VirionProjectSelector $selector) {}
@@ -59,7 +61,7 @@ final class VirionDependencyResolver
                             continue;
                         }
                         $path = $project->location . '/devtools-provenance.json';
-                        $contents = is_file($path) && !is_link($path) ? file_get_contents($path) : false;
+                        $contents = is_file($path) && !Filesystem::isLink($path) ? file_get_contents($path) : false;
                         $provenance = $contents === false ? null : json_decode($contents, true);
                         if (!is_array($provenance) || ($provenance['composerPackageSha256'] ?? null) !== $constraint->composerPackageSha256) {
                             throw new VirionException("Prepared virion {$constraint->name} does not match this composer.lock. Run prepare into a new directory and use that --virions directory.");

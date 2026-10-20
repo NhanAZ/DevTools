@@ -35,6 +35,17 @@ final class VirionVersionConstraintTest extends TestCase
         yield 'major wildcard' => ['1.*', '1.99.0', true];
         yield 'comparison range' => ['>=1.2.0 <2.0.0', '1.8.4', true];
         yield 'comparison range upper bound' => ['>=1.2.0 <2.0.0', '2.0.0', false];
+        yield 'different prerelease labels are distinct' => ['1.0.0-alpha.1', '1.0.0-a.1', false];
+        yield 'unknown labels use lexical order' => ['>1.0.0-bar.1', '1.0.0-foo.1', true];
+        yield 'numeric prerelease precedes lexical' => ['<1.0.0-alpha', '1.0.0-1', true];
+        yield 'case-sensitive prerelease labels' => ['1.0.0-alpha', '1.0.0-ALPHA', false];
+        yield 'metadata does not affect equality' => ['1.0.0+one', '1.0.0+two', true];
+        yield 'large exact versions stay distinct' => ['99999999999999999999.0.0', '99999999999999999998.0.0', false];
+        yield 'large prerelease numbers stay distinct' => ['>1.0.0-99999999999999999998', '1.0.0-99999999999999999999', true];
+        yield 'large caret lower bound' => ['^99999999999999999999.2.3', '99999999999999999999.2.3', true];
+        yield 'large caret upper bound' => ['^99999999999999999999.2.3', '100000000000000000000.0.0', false];
+        yield 'large tilde patch' => ['~1.99999999999999999999.0', '1.99999999999999999999.3', true];
+        yield 'large wildcard' => ['99999999999999999999.*', '99999999999999999999.0.0', true];
         $commit = '0.0.0-commit.' . str_repeat('a', 39);
         yield 'locked commit match' => [$commit . 'b', $commit . 'b', true];
         yield 'locked commit mismatch despite PHP version comparison' => [$commit . 'b', $commit . 'c', false];
@@ -52,5 +63,16 @@ final class VirionVersionConstraintTest extends TestCase
     {
         $this->expectException(VirionException::class);
         new VirionVersionConstraint('^0.0.0-commit.' . str_repeat('a', 40));
+    }
+
+    public function test_semver_prerelease_precedence_sequence(): void
+    {
+        $versions = ['1.0.0-alpha', '1.0.0-alpha.1', '1.0.0-alpha.beta', '1.0.0-beta', '1.0.0-beta.2', '1.0.0-beta.11', '1.0.0-rc.1', '1.0.0'];
+        foreach ($versions as $index => $version) {
+            if ($index === 0) {
+                continue;
+            }
+            self::assertTrue((new VirionVersionConstraint('>' . $versions[$index - 1]))->matches($version));
+        }
     }
 }

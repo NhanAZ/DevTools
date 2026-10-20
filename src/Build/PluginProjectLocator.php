@@ -6,9 +6,9 @@ namespace NhanAZ\DevTools\Build;
 
 use function dirname;
 use function is_dir;
-use function is_link;
 
 use NhanAZ\DevTools\Loader\FolderPluginDiscovery;
+use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\Path;
 use NhanAZ\DevTools\Validation\PluginManifestReader;
 
@@ -34,7 +34,7 @@ final class PluginProjectLocator
             throw new BuildException("Cannot resolve plugins directory {$pluginsDirectory}.");
         }
         if (is_dir($nameOrPath)) {
-            if (is_link($nameOrPath)) {
+            if (Filesystem::isLink($nameOrPath)) {
                 throw new BuildException("Refusing symbolic-link plugin project: {$nameOrPath}");
             }
             $real = realpath($nameOrPath);

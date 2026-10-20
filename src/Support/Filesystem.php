@@ -26,6 +26,32 @@ use function unlink;
 
 final class Filesystem
 {
+    public static function isLink(string $path): bool
+    {
+        $path = rtrim($path, '/\\');
+        if (is_link($path)) {
+            return true;
+        }
+        if (PHP_OS_FAMILY !== 'Windows' || $path === '' || preg_match('/^[A-Za-z]:$/D', $path) === 1
+            || in_array(basename($path), ['.', '..'], true)) {
+            return false;
+        }
+
+        // Windows junctions resolve to another directory but are not reported by is_link().
+        $resolved = realpath($path);
+        $parent = realpath(dirname($path));
+        if ($resolved === false || $parent === false
+            || strcasecmp($resolved, Path::join($parent, basename($path))) === 0) {
+            return false;
+        }
+
+        // An NTFS short name still identifies the same entry; a junction has its own identity.
+        $entry = lstat($path);
+        $target = lstat($resolved);
+        return $entry === false || $target === false || $entry['ino'] === 0
+            || $entry['ino'] !== $target['ino'] || $entry['dev'] !== $target['dev'];
+    }
+
     public function ensureDirectory(string $path): void
     {
         if (is_dir($path)) {
@@ -41,7 +67,7 @@ final class Filesystem
      */
     public function copyTree(string $source, string $destination, ?callable $include = null): void
     {
-        if (is_link($source)) {
+        if (self::isLink($source)) {
             throw new FilesystemException("Refusing to copy symbolic-link directory: {$source}");
         }
         if (!is_dir($source)) {
@@ -58,11 +84,11 @@ final class Filesystem
                 continue;
             }
             $relative = str_replace('\\', '/', substr($entry->getPathname(), strlen($source) + 1));
+            if (self::isLink($entry->getPathname())) {
+                throw new FilesystemException("Refusing to copy symbolic link: {$entry->getPathname()}");
+            }
             if ($include !== null && !$include($relative)) {
                 continue;
-            }
-            if ($entry->isLink()) {
-                throw new FilesystemException("Refusing to copy symbolic link: {$entry->getPathname()}");
             }
             $target = Path::join($destination, $relative);
             if ($entry->isDir()) {
@@ -82,7 +108,7 @@ final class Filesystem
         $current = $base;
         foreach (explode('/', $relative) as $component) {
             $current = Path::join($current, $component);
-            if (is_link($current)) {
+            if (self::isLink($current)) {
                 throw new FilesystemException("Refusing path through symbolic link: {$current}");
             }
         }
@@ -90,7 +116,7 @@ final class Filesystem
 
     public function copyFile(string $source, string $destination): void
     {
-        if (!is_file($source) || is_link($source)) {
+        if (!is_file($source) || self::isLink($source)) {
             throw new FilesystemException("Refusing to copy a missing file or symbolic link: {$source}");
         }
         $this->ensureDirectory(dirname($destination));
@@ -101,32 +127,22 @@ final class Filesystem
 
     public function removeTree(string $path): void
     {
-        if (!file_exists($path) && !is_link($path)) {
+        if (!file_exists($path) && !self::isLink($path)) {
             return;
         }
-        if (is_link($path) || is_file($path)) {
-            if (!unlink($path)) {
+        if (self::isLink($path) || is_file($path)) {
+            if (!(PHP_OS_FAMILY === 'Windows' && is_dir($path) ? rmdir($path) : unlink($path))) {
                 throw new FilesystemException("Cannot remove file: {$path}");
             }
 
             return;
         }
 
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
-            RecursiveIteratorIterator::CHILD_FIRST,
-        );
-        foreach ($iterator as $entry) {
+        foreach (new FilesystemIterator($path, FilesystemIterator::SKIP_DOTS) as $entry) {
             if (!$entry instanceof SplFileInfo) {
                 continue;
             }
-            if ($entry->isLink() || $entry->isFile()) {
-                if (!unlink($entry->getPathname())) {
-                    throw new FilesystemException("Cannot remove file: {$entry->getPathname()}");
-                }
-            } elseif (!rmdir($entry->getPathname())) {
-                throw new FilesystemException("Cannot remove directory: {$entry->getPathname()}");
-            }
+            $this->removeTree($entry->getPathname());
         }
         if (!rmdir($path)) {
             throw new FilesystemException("Cannot remove directory: {$path}");

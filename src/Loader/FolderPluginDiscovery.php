@@ -9,6 +9,7 @@ use FilesystemIterator;
 use function is_dir;
 use function is_file;
 
+use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\Path;
 
 use function sort;
@@ -39,7 +40,7 @@ final class FolderPluginDiscovery
             if (!$entry instanceof SplFileInfo) {
                 continue;
             }
-            if (!$entry->isDir() || $entry->isLink() || Path::isExcluded($entry->getFilename())) {
+            if (!$entry->isDir() || Filesystem::isLink($entry->getPathname()) || Path::isExcluded($entry->getFilename())) {
                 continue;
             }
             $path = $entry->getPathname();

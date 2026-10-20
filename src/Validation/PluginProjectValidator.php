@@ -7,9 +7,9 @@ namespace NhanAZ\DevTools\Validation;
 use function file_get_contents;
 use function is_dir;
 use function is_file;
-use function is_link;
 use function is_string;
 
+use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\PhpSourceInspector;
 
 use function preg_match;
@@ -32,7 +32,7 @@ final class PluginProjectValidator
 
             return $result;
         }
-        if (is_link($projectRoot)) {
+        if (Filesystem::isLink($projectRoot)) {
             $result->error('project.symlink', 'Symbolic-link plugin roots are not loaded.', $projectRoot, 'Use a real directory under plugins/.');
 
             return $result;
@@ -49,7 +49,7 @@ final class PluginProjectValidator
 
             return $result;
         }
-        if (is_link($manifestPath)) {
+        if (Filesystem::isLink($manifestPath)) {
             $result->error('plugin.manifest_symlink', 'plugin.yml may not be a symbolic link.', $manifestPath, 'Copy the manifest into the project directory.');
 
             return $result;
@@ -79,7 +79,7 @@ final class PluginProjectValidator
 
             return $result;
         }
-        if (is_link($src)) {
+        if (Filesystem::isLink($src)) {
             $result->error('plugin.src_symlink', 'The plugin source directory may not be a symbolic link.', $src, 'Copy source files into the project src/ directory.');
 
             return $result;
@@ -155,6 +155,9 @@ final class PluginProjectValidator
 
         $api = $manifest->raw['api'] ?? null;
         $apiValues = is_array($api) ? $api : [$api];
+        if ($apiValues === []) {
+            $result->error('plugin.api_invalid', 'The api field must contain at least one Axolotl-PM API version.', $manifestPath, 'Declare a version such as api: 5.0.0.');
+        }
         foreach ($apiValues as $apiValue) {
             if (!is_string($apiValue) || preg_match('/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.]+)?$/D', $apiValue) !== 1) {
                 $result->error('plugin.api_invalid', 'The api field must contain Axolotl-PM API version strings.', $manifestPath, 'Use a version such as api: 5.0.0 or a list of versions supported by your target server.');
@@ -163,7 +166,7 @@ final class PluginProjectValidator
         }
 
         $resources = $projectRoot . DIRECTORY_SEPARATOR . 'resources';
-        if (is_link($resources)) {
+        if (Filesystem::isLink($resources)) {
             $result->error('plugin.resources_symlink', 'resources may not be a symbolic link.', $resources, 'Copy resources into the project resources/ directory.');
         } elseif (file_exists($resources) && !is_dir($resources)) {
             $result->error('plugin.resources_invalid', 'resources exists but is not a directory.', $resources, 'Replace it with a resources/ directory.');
@@ -200,6 +203,9 @@ final class PluginProjectValidator
     {
         $current = $base;
         foreach (explode('/', $relative) as $component) {
+            if (!is_dir($current)) {
+                return false;
+            }
             $entries = scandir($current);
             if ($entries === false || !in_array($component, $entries, true)) {
                 return false;
@@ -215,7 +221,7 @@ final class PluginProjectValidator
         $current = $base;
         foreach (explode('/', $relative) as $component) {
             $current .= DIRECTORY_SEPARATOR . $component;
-            if (is_link($current)) {
+            if (Filesystem::isLink($current)) {
                 return $current;
             }
         }

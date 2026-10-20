@@ -32,11 +32,11 @@ final class ComposerVirionPreparer
         }
         $projectRoot = realpath($projectRoot) ?: throw new BuildException('Cannot resolve project root.');
         $destination = rtrim($destination, '/\\');
-        if (file_exists($destination) || is_link($destination)) {
+        if (file_exists($destination) || Filesystem::isLink($destination)) {
             throw new BuildException("Refusing to replace existing dependency directory {$destination}. Prepare into a new directory, then select it with --virions.");
         }
         for ($component = dirname($destination); dirname($component) !== $component; $component = dirname($component)) {
-            if (is_link($component)) {
+            if (Filesystem::isLink($component)) {
                 throw new BuildException("Refusing dependency output through symbolic link {$component}.");
             }
         }
@@ -216,12 +216,15 @@ final class ComposerVirionPreparer
             throw new BuildException("Composer virion {$name} classmap root does not exist: {$classmapRoot}.");
         }
         $namespaceDirectory = substr($sourceRelative, strlen($classmapRoot) + 1) . '/';
-        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST,
+        );
         foreach ($iterator as $entry) {
             if (!$entry instanceof SplFileInfo) {
                 continue;
             }
-            if ($entry->isLink()) {
+            if (Filesystem::isLink($entry->getPathname())) {
                 throw new BuildException("Composer virion {$name} classmap contains a symbolic link: {$entry->getPathname()}.");
             }
             if (!$entry->isFile() || !str_ends_with(strtolower($entry->getFilename()), '.php')) {

@@ -3,11 +3,10 @@
 ## Fresh install
 
 1. Use Axolotl-PM with the API declared by DevTools and its required PHP extensions. See the [verified runtime target](runtime-validation.md).
-2. Open the [latest GitHub release](https://github.com/NhanAZ/DevTools/releases/latest).
-3. Download the installable PHAR from the [latest DevTools release](https://github.com/NhanAZ/DevTools/releases/latest) and compare its SHA-256 with the release checksum and recorded build provenance. GitHub's automatic "Source code" archives are not installable plugin artifacts.
-4. Stop the server and copy the file to `plugins/DevTools.phar`.
-5. Start the server. DevTools creates server-root `virions/` and `build/` directories if they are missing.
-6. Run `/devtools status` as an operator and check that the displayed version matches the release.
+2. Download the PHAR from the [latest DevTools release](https://github.com/NhanAZ/DevTools/releases/latest) and compare its SHA-256 with the release checksum. GitHub's "Source code" archives are not installable plugins.
+3. Stop the server and copy the file to `plugins/DevTools.phar`.
+4. Start the server. DevTools creates server-root `virions/` and `build/` directories if they are missing.
+5. Run `/devtools status` as an operator and check that the displayed version matches the release.
 
 DevTools cannot bootstrap itself from a source folder on an otherwise unmodified server. Always install its release PHAR first.
 
@@ -34,7 +33,7 @@ Do not keep two DevTools PHARs in `plugins/`. Axolotl-PM will detect a duplicate
 
 ## Roll back
 
-Stop the server, replace `plugins/DevTools.phar` with the previously working release artifact, and restart. DevTools does not maintain a database or mutate plugin source, so rollback requires no data conversion unless a future release note explicitly says otherwise.
+Stop the server, restore the previously working `plugins/DevTools.phar`, and restart. DevTools does not maintain a database or change plugin source, so no data conversion is needed.
 
 ## Uninstall
 

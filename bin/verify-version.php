@@ -6,7 +6,10 @@ use NhanAZ\DevTools\Virion\VirionVersionConstraint;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-$expected = ltrim($argv[1] ?? '', 'v');
+$expected = $argv[1] ?? '';
+if (str_starts_with($expected, 'v')) {
+    $expected = substr($expected, 1);
+}
 if (!VirionVersionConstraint::isValidVersion($expected)) {
     fwrite(STDERR, "Expected a semantic release version or v-prefixed tag. Received \"{$expected}\".\n");
     exit(1);

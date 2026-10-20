@@ -71,6 +71,19 @@ final class DevToolsCommandHandlerTest extends TestCase
         self::assertDirectoryDoesNotExist($this->temporaryDirectory . '/plugins/BuildFixture');
     }
 
+    public function test_qualified_legacy_aliases_build_and_extract(): void
+    {
+        $this->copyFixture('BuildPlugin', 'plugins/Source');
+        $this->copyFixture('SharedVirion', 'virions/Shared');
+        $messages = $this->command(['BuildFixture'], 'devtools:makeplugin');
+        self::assertStringContainsString('Built BuildFixture successfully', $messages);
+        self::assertFileExists($this->temporaryDirectory . '/build/BuildFixture.phar');
+
+        $messages = $this->command(['BuildFixture'], 'devtools:extractplugin');
+        self::assertStringContainsString('Extracted', $messages);
+        self::assertFileExists($this->temporaryDirectory . '/plugins/BuildFixture/plugin.yml');
+    }
+
     /** @param list<string> $arguments */
     private function command(array $arguments, string $label = 'devtools'): string
     {

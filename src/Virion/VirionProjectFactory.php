@@ -6,8 +6,8 @@ namespace NhanAZ\DevTools\Virion;
 
 use function is_dir;
 use function is_file;
-use function is_link;
 
+use NhanAZ\DevTools\Support\Filesystem;
 use Phar;
 
 use function realpath;
@@ -23,7 +23,7 @@ final class VirionProjectFactory
 
     public function open(string $location): VirionProject
     {
-        if (is_link($location)) {
+        if (Filesystem::isLink($location)) {
             throw new VirionException("Refusing symbolic-link virion path: {$location}");
         }
         $isPhar = is_file($location) && str_ends_with(strtolower($location), '.phar');
@@ -52,18 +52,24 @@ final class VirionProjectFactory
         if (!is_file($manifestPath)) {
             throw new VirionException("Cannot load virion at {$location}: virion.yml is missing.");
         }
+        if (!$isPhar && Filesystem::isLink($manifestPath)) {
+            throw new VirionException("Cannot load virion at {$location}: virion.yml may not be a symbolic link.");
+        }
         $manifest = $this->manifestReader->read($manifestPath);
         $source = $root . '/src';
-        if (!$isPhar && is_link($source)) {
+        if (!$isPhar && Filesystem::isLink($source)) {
             throw new VirionException("Cannot load {$manifest->name}: source directory may not be a symbolic link: {$source}.");
         }
         if (!is_dir($source)) {
             throw new VirionException("Cannot load {$manifest->name}: source directory is missing at {$source}.");
         }
 
-        $antigenRoot = $source . '/' . str_replace('\\', '/', $manifest->antigen);
-        if (!$isPhar && is_link($antigenRoot)) {
-            throw new VirionException("Cannot load {$manifest->name}: antigen source root may not be a symbolic link: {$antigenRoot}.");
+        $antigenRoot = $source;
+        foreach (explode('\\', $manifest->antigen) as $component) {
+            $antigenRoot .= '/' . $component;
+            if (!$isPhar && Filesystem::isLink($antigenRoot)) {
+                throw new VirionException("Cannot load {$manifest->name}: antigen source path may not contain a symbolic link: {$antigenRoot}.");
+            }
         }
         $sourceRoot = is_dir($antigenRoot) ? $antigenRoot : $source;
 

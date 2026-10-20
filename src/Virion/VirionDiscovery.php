@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace NhanAZ\DevTools\Virion;
 
 use FilesystemIterator;
-
-use function is_dir;
-
 use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\Path;
 
@@ -35,7 +32,7 @@ final class VirionDiscovery
             if (!$entry instanceof SplFileInfo) {
                 continue;
             }
-            if (Path::isExcluded($entry->getFilename()) || $entry->isLink()) {
+            if (Path::isExcluded($entry->getFilename()) || Filesystem::isLink($entry->getPathname())) {
                 continue;
             }
             if ($entry->isDir() || ($entry->isFile() && str_ends_with(strtolower($entry->getFilename()), '.phar'))) {

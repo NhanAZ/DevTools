@@ -9,7 +9,6 @@ use function explode;
 use function file_exists;
 use function file_put_contents;
 use function is_dir;
-use function is_link;
 
 use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\Path;
@@ -26,7 +25,7 @@ final class PharExtractor
 
     public function extract(ArchiveReader $archive, string $destination, bool $overwrite = false): int
     {
-        if (is_link($destination)) {
+        if (Filesystem::isLink($destination)) {
             throw new BuildException("Refusing symbolic-link extraction destination: {$destination}");
         }
         if (file_exists($destination) && !is_dir($destination)) {
@@ -119,7 +118,7 @@ final class PharExtractor
                 $this->filesystem->removeTree($backup);
             }
         } finally {
-            if (file_exists($stage) || is_link($stage)) {
+            if (file_exists($stage) || Filesystem::isLink($stage)) {
                 $this->filesystem->removeTree($stage);
             }
         }
@@ -134,7 +133,7 @@ final class PharExtractor
         $current = $base;
         foreach ($components as $component) {
             $current = Path::join($current, $component);
-            if (is_link($current)) {
+            if (Filesystem::isLink($current)) {
                 throw new BuildException("Refusing extraction through symbolic-link directory: {$current}");
             }
             if (file_exists($current) && !is_dir($current)) {

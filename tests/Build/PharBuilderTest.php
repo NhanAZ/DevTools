@@ -127,6 +127,104 @@ final class PharBuilderTest extends TestCase
         $this->builder()->build($project, $virions, $project . DIRECTORY_SEPARATOR . 'src');
     }
 
+    public function test_overwrite_rejects_an_output_directory_without_moving_it(): void
+    {
+        $project = $this->copyFixture('BuildPlugin', 'plugins/BuildPlugin');
+        $virion = $this->copyFixture('SharedVirion', 'virions/SharedVirion');
+        $output = $this->temporaryDirectory . '/build';
+        $destination = $output . '/BuildFixture.phar';
+        $this->filesystem->ensureDirectory($destination);
+        file_put_contents($destination . '/keep.txt', 'original');
+
+        try {
+            $this->builder()->build($project, dirname($virion), $output, true);
+            self::fail('Expected a non-file output to be rejected.');
+        } catch (BuildException $error) {
+            self::assertStringContainsString('not a regular file', $error->getMessage());
+        } finally {
+            self::assertDirectoryExists($destination);
+            self::assertSame('original', file_get_contents($destination . '/keep.txt'));
+            self::assertSame([], glob($output . '/*.backup-*') ?: []);
+        }
+    }
+
+    public function test_numeric_leading_virion_name_has_a_valid_shaded_namespace(): void
+    {
+        $project = $this->copyFixture('BuildPlugin', 'plugins/BuildPlugin');
+        $virion = $this->copyFixture('SharedVirion', 'virions/3d-library');
+        file_put_contents($project . '/devtools.yml', "virions: [3d-library]\n");
+        file_put_contents($virion . '/virion.yml', "name: 3d-library\nversion: 1.0.0\nantigen: Shared\\Virion\napi: 5.0.0\n");
+
+        $result = $this->builder()->build($project, dirname($virion), $this->temporaryDirectory . '/build');
+
+        self::assertMatchesRegularExpression(
+            '/^(?:[A-Za-z_][A-Za-z0-9_]*\\\\)+[A-Za-z_][A-Za-z0-9_]*$/D',
+            $result->shadedVirions['Shared\\Virion'],
+        );
+        self::assertFileExists($result->outputPath);
+    }
+
+    public function test_numeric_leading_plugin_name_without_a_namespace_can_be_shaded(): void
+    {
+        $project = $this->copyFixture('BuildPlugin', 'plugins/3dPlugin');
+        $virion = $this->copyFixture('SharedVirion', 'virions/SharedVirion');
+        file_put_contents($project . '/plugin.yml', "name: 3dPlugin\nversion: 1.0.0\nmain: Main\napi: 5.0.0\n");
+        file_put_contents($project . '/src/Main.php', "<?php\nclass Main extends \\pocketmine\\plugin\\PluginBase {}\n");
+
+        $result = $this->builder()->build($project, dirname($virion), $this->temporaryDirectory . '/build');
+
+        self::assertStringStartsWith('DevToolsShade\\_3dPlugin\\', $result->shadedVirions['Shared\\Virion']);
+        self::assertFileExists($result->outputPath);
+    }
+
+    /** @dataProvider virionOutputCollisionProvider */
+    public function test_virion_outputs_cannot_overwrite_plugin_files(string $relative, string $includes): void
+    {
+        $project = $this->copyFixture('BuildPlugin', 'plugins/BuildPlugin');
+        $virion = $this->copyFixture('SharedVirion', 'virions/SharedVirion');
+        $resource = $project . '/' . $relative;
+        $this->filesystem->ensureDirectory(dirname($resource));
+        file_put_contents($resource, 'plugin resource');
+        file_put_contents($project . '/devtools.yml', $includes, FILE_APPEND);
+        $output = $this->temporaryDirectory . '/build';
+        $this->filesystem->ensureDirectory($output);
+        file_put_contents($output . '/BuildFixture.phar', 'previous artifact');
+
+        try {
+            $this->builder()->build($project, dirname($virion), $output, true);
+            self::fail('Expected colliding virion resources to be rejected.');
+        } catch (BuildException $error) {
+            self::assertStringContainsString('collides with an existing', $error->getMessage());
+        }
+        self::assertSame('plugin resource', file_get_contents($resource));
+        self::assertSame('previous artifact', file_get_contents($output . '/BuildFixture.phar'));
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function virionOutputCollisionProvider(): iterable
+    {
+        yield 'resources' => ['resources/devtools-virions/SharedVirion/default.txt', ''];
+        yield 'metadata' => ['META-INF/virions/SharedVirion/LICENSE', "include-paths: [META-INF]\n"];
+    }
+
+    public function test_plugin_license_and_notice_variants_are_preserved(): void
+    {
+        $project = $this->copyFixture('BuildPlugin', 'plugins/BuildPlugin');
+        $virion = $this->copyFixture('SharedVirion', 'virions/SharedVirion');
+        $notices = ['LICENSE.txt', 'COPYING.md', 'NOTICE.md'];
+        foreach ($notices as $notice) {
+            file_put_contents($project . '/' . $notice, $notice . ' contents');
+        }
+
+        $result = $this->builder()->build($project, dirname($virion), $this->temporaryDirectory . '/build');
+        $phar = new Phar($result->outputPath);
+
+        foreach ($notices as $notice) {
+            self::assertTrue(isset($phar[$notice]), $notice);
+            self::assertSame($notice . ' contents', $phar[$notice]->getContent());
+        }
+    }
+
     public function test_include_path_may_not_overlap_build_output(): void
     {
         $project = $this->copyFixture('BuildPlugin', 'plugins/BuildPlugin');

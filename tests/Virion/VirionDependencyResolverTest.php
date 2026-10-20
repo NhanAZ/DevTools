@@ -78,6 +78,38 @@ final class VirionDependencyResolverTest extends TestCase
         $this->resolver()->resolve(['a' => [$a1, $a2], 'b' => [$b]], $this->roots('A'));
     }
 
+    public function test_build_metadata_does_not_rank_a_release_below_its_prerelease(): void
+    {
+        $prerelease = $this->project('A', '1.0.0-beta.1');
+        $release = $this->project('A', '1.0.0+build.1');
+
+        self::assertSame([$release], $this->resolver()->resolve(['a' => [$prerelease, $release]], $this->roots('A')));
+    }
+
+    public function test_prerelease_selection_uses_semantic_version_precedence(): void
+    {
+        $lower = $this->project('A', '1.0.0-bar.1');
+        $higher = $this->project('A', '1.0.0-foo.1');
+
+        self::assertSame([$higher], $this->resolver()->resolve(['a' => [$lower, $higher]], $this->roots('A')));
+    }
+
+    /** @dataProvider duplicateBuildMetadataProvider */
+    public function test_build_metadata_does_not_disambiguate_copies_of_the_selected_version(string $left, string $right): void
+    {
+        $this->expectException(VirionException::class);
+        $this->expectExceptionMessage('exists in multiple locations');
+
+        $this->resolver()->resolve(['a' => [$this->project('A', $left), $this->project('A', $right)]], $this->roots('A'));
+    }
+
+    /** @return iterable<string, array{string, string}> */
+    public static function duplicateBuildMetadataProvider(): iterable
+    {
+        yield 'release and metadata' => ['1.0.0', '1.0.0+build.1'];
+        yield 'different metadata' => ['1.0.0+build.1', '1.0.0+build.2'];
+    }
+
     private function resolver(): VirionDependencyResolver
     {
         return new VirionDependencyResolver(new VirionProjectSelector());

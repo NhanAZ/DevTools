@@ -8,8 +8,8 @@ use function basename;
 use function implode;
 use function is_dir;
 use function is_file;
-use function is_link;
 
+use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\Path;
 use NhanAZ\DevTools\Validation\PluginManifestReader;
 use NhanAZ\DevTools\Validation\PluginProjectValidator;
@@ -43,7 +43,7 @@ final class FolderPluginLoader implements PluginLoader
 
     public function canLoadPlugin(string $path): bool
     {
-        if (!is_dir($path) || is_link($path) || Path::isExcluded(basename($path)) || $this->isExcludedProject($path)) {
+        if (!is_dir($path) || Filesystem::isLink($path) || Path::isExcluded(basename($path)) || $this->isExcludedProject($path)) {
             return false;
         }
 

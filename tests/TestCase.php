@@ -49,6 +49,19 @@ abstract class TestCase extends PHPUnitTestCase
         return $destination;
     }
 
+    protected function createSymbolicLink(string $target, string $link): void
+    {
+        set_error_handler(static fn(): bool => true);
+        try {
+            $created = symlink($target, $link);
+        } finally {
+            restore_error_handler();
+        }
+        if (!$created) {
+            self::markTestSkipped('Creating symlinks is not permitted on this system.');
+        }
+    }
+
     /** @return array{PluginManifestReader, PluginProjectValidator} */
     protected function validationServices(): array
     {

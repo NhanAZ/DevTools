@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace NhanAZ\DevTools\Virion;
 
 use FilesystemIterator;
+use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\PhpSourceInspector;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -23,15 +24,19 @@ final class VirionClassScanner
     /** @return list<string> */
     public function scan(VirionProject $project): array
     {
+        if (Filesystem::isLink($project->sourceRoot)) {
+            throw new VirionException("Cannot load {$project->manifest->name}: symbolic link found at {$project->sourceRoot}.");
+        }
         $classes = [];
         $iterator = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($project->sourceRoot, FilesystemIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::SELF_FIRST,
         );
         foreach ($iterator as $entry) {
             if (!$entry instanceof SplFileInfo) {
                 continue;
             }
-            if ($entry->isLink()) {
+            if ($entry->isLink() || Filesystem::isLink($entry->getPathname())) {
                 throw new VirionException("Cannot load {$project->manifest->name}: symbolic link found at {$entry->getPathname()}.");
             }
             if (!$entry->isFile() || !str_ends_with(strtolower($entry->getFilename()), '.php')) {
@@ -62,6 +67,9 @@ final class VirionClassScanner
     {
         $current = $base;
         foreach (explode('/', $relative) as $component) {
+            if (!is_dir($current)) {
+                return false;
+            }
             $entries = scandir($current);
             if ($entries === false || !in_array($component, $entries, true)) {
                 return false;

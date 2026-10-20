@@ -68,11 +68,11 @@ Shared development loading registers one selected namespace and version in the s
 
 A build shades the complete selected graph into the plugin's private namespace. Separate plugins can bundle separate versions, but their library types are distinct and static state is separate. Do not exchange objects of a privately bundled library as a cross-plugin API. Define that API in an intentionally external plugin dependency instead. There is no public or shared namespace contract for bundled virions.
 
-Namespaces and supported static PHP class references are rewritten by the existing AST shader. A variable second argument to a two-argument global `is_a()` call is allowed because the default `allow_string` setting uses the target type for matching without dynamically loading it. Calls with a third argument and other dynamic class strings or dynamically selected class operations remain subject to the shading guard. A narrowly annotated runtime factory can be accepted when it validates the selected class with `class_exists()` and `is_subclass_of()` before instantiation; the annotation and validation sequence are both required. Successful preparation therefore does **not** guarantee that a package passes shading or boots on Axolotl-PM. Async worker behavior must be checked separately on the pinned server runtime. Ordinary PHP unit execution is not that check.
+The AST shader rewrites namespaces and supported static PHP class references. Dynamic references must satisfy the [shading rules](building.md#what-the-builder-validates). Test async worker behavior on the pinned server runtime; ordinary PHP unit execution does not cover it.
 
 ## Compatibility limits
 
-Preparation and shading are separate checks. A package can satisfy the supported Composer metadata format yet fail because its code selects a library class dynamically. Do not disable the guard or assume successful preparation guarantees a standalone artifact.
+Preparation, shading and runtime loading are separate checks. Valid Composer metadata does not guarantee that a package's dynamic class references can be shaded or that it boots on Axolotl-PM.
 
 The dedicated Composer fixtures test a transitive dependency graph, execution of shaded classes, colocated resources, licenses and provenance. Failure cases cover stale locks, changed prepared source, unsupported autoload layouts and preservation of existing output. These tests do not establish compatibility with every Composer package.
 

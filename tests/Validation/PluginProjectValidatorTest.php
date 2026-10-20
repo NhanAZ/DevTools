@@ -49,4 +49,29 @@ final class PluginProjectValidatorTest extends TestCase
         self::assertContains('plugin.duplicate_commands', $codes);
         self::assertContains('plugin.duplicate_permissions', $codes);
     }
+
+    public function test_empty_api_list_is_rejected(): void
+    {
+        $project = $this->copyFixture('ValidPlugin');
+        file_put_contents($project . '/plugin.yml', "name: FixturePlugin\nversion: 1.0.0\nmain: Fixture\\Plugin\\Main\nsrc-namespace-prefix: Fixture\\Plugin\napi: []\n");
+        [, $validator] = $this->validationServices();
+
+        self::assertContains('plugin.api_invalid', array_map(
+            static fn($issue): string => $issue->code,
+            $validator->validate($project)->issues(),
+        ));
+    }
+
+    public function test_file_in_main_path_reports_missing_source_without_warning(): void
+    {
+        $project = $this->copyFixture('ValidPlugin');
+        file_put_contents($project . '/plugin.yml', "name: FixturePlugin\nversion: 1.0.0\nmain: Fixture\\Plugin\\Nested\\Main\nsrc-namespace-prefix: Fixture\\Plugin\napi: 5.0.0\n");
+        file_put_contents($project . '/src/Nested', 'not a directory');
+        [, $validator] = $this->validationServices();
+
+        self::assertContains('plugin.main_missing', array_map(
+            static fn($issue): string => $issue->code,
+            $validator->validate($project)->issues(),
+        ));
+    }
 }

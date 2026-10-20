@@ -61,10 +61,10 @@ final class DynamicClassReferencePolicy
     public static function allowsNonAutoloadingIsATypeArgument(FuncCall $node): bool
     {
         $name = $node->name;
-        if (!$name instanceof Name || strtolower(ltrim($name->toString(), '\\')) !== 'is_a'
-            || count($node->args) !== 2
-            || !$node->args[1] instanceof Arg
-            || !$node->args[1]->value instanceof Variable) {
+        $arguments = self::classNameArguments($node);
+        if (!$name instanceof Name || self::resolvedName($name) !== 'is_a'
+            || count($node->args) !== 2 || count($arguments) !== 1
+            || $arguments[0]->unpack || !$arguments[0]->value instanceof Variable) {
             return false;
         }
 
@@ -72,6 +72,43 @@ final class DynamicClassReferencePolicy
         return $name->isFullyQualified()
             || ($resolvedName instanceof Name && $resolvedName->isFullyQualified()
                 && strtolower(ltrim($resolvedName->toString(), '\\')) === 'is_a');
+    }
+
+    public static function resolvedName(Name $name): string
+    {
+        $resolved = $name->getAttribute('resolvedName');
+        return strtolower(ltrim(($resolved instanceof Name ? $resolved : $name)->toString(), '\\'));
+    }
+
+    /** @return list<Arg> */
+    public static function classNameArguments(FuncCall $node): array
+    {
+        if (!$node->name instanceof Name) {
+            return [];
+        }
+        $parameters = match (self::resolvedName($node->name)) {
+            'class_alias' => [0 => 'class', 1 => 'alias'],
+            'class_exists' => [0 => 'class'],
+            'interface_exists' => [0 => 'interface'],
+            'trait_exists' => [0 => 'trait'],
+            'enum_exists' => [0 => 'enum'],
+            'is_a', 'is_subclass_of' => [1 => 'class'],
+            default => [],
+        };
+        if ($parameters === []) {
+            return [];
+        }
+        $arguments = [];
+        foreach ($node->args as $position => $argument) {
+            if (!$argument instanceof Arg) {
+                continue;
+            }
+            if ($argument->unpack
+                || ($argument->name === null ? isset($parameters[$position]) : in_array($argument->name->toString(), $parameters, true))) {
+                $arguments[] = $argument;
+            }
+        }
+        return $arguments;
     }
 
     /** The variable class operand of instanceof performs a type check without autoloading. */

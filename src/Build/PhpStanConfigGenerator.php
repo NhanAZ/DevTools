@@ -7,12 +7,12 @@ namespace NhanAZ\DevTools\Build;
 use function array_keys;
 use function implode;
 use function is_dir;
-use function is_link;
 use function json_encode;
 
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_SLASHES;
 
+use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Virion\VirionProject;
 
 use function preg_match;
@@ -37,13 +37,13 @@ final class PhpStanConfigGenerator
         $level = $this->normalizeLevel($level);
         $projectRoot = $this->requireDirectory($projectRoot, 'plugin project');
         $serverRoot = $this->requireDirectory($serverRoot, 'server source');
-        $projectSource = $this->requireChildDirectory($projectRoot, 'src', 'plugin source');
-        $serverSource = $this->requireChildDirectory($serverRoot, 'src', 'server source');
+        $projectSource = $this->requireDirectory($projectRoot . DIRECTORY_SEPARATOR . 'src', 'plugin source');
+        $serverSource = $this->requireDirectory($serverRoot . DIRECTORY_SEPARATOR . 'src', 'server source');
 
         $scanDirectories = [$this->portable($serverSource) => $serverSource];
         foreach (['generated', 'vendor'] as $optional) {
             $path = $serverRoot . DIRECTORY_SEPARATOR . $optional;
-            if (is_link($path)) {
+            if (Filesystem::isLink($path)) {
                 throw new BuildException("Refusing symbolic-link server {$optional} directory: {$path}");
             }
             if (is_dir($path)) {
@@ -56,7 +56,7 @@ final class PhpStanConfigGenerator
         }
 
         foreach ($virions as $virion) {
-            if (is_link($virion->sourceRoot) || !is_dir($virion->sourceRoot)) {
+            if (Filesystem::isLink($virion->sourceRoot) || !is_dir($virion->sourceRoot)) {
                 throw new BuildException(
                     "Cannot analyze virion {$virion->manifest->name}: source directory is missing or is a symbolic link at {$virion->sourceRoot}.",
                 );
@@ -107,24 +107,7 @@ final class PhpStanConfigGenerator
 
     private function requireDirectory(string $path, string $description): string
     {
-        if (is_link($path)) {
-            throw new BuildException("Refusing symbolic-link {$description} directory: {$path}");
-        }
-        if (!is_dir($path)) {
-            throw new BuildException("Cannot run PHPStan: {$description} directory is missing at {$path}.");
-        }
-        $real = realpath($path);
-        if ($real === false) {
-            throw new BuildException("Cannot resolve {$description} directory: {$path}");
-        }
-
-        return $real;
-    }
-
-    private function requireChildDirectory(string $root, string $child, string $description): string
-    {
-        $path = $root . DIRECTORY_SEPARATOR . $child;
-        if (is_link($path)) {
+        if (Filesystem::isLink($path)) {
             throw new BuildException("Refusing symbolic-link {$description} directory: {$path}");
         }
         if (!is_dir($path)) {

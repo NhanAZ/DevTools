@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.17 - 2026-10-20
+
+- Reject linked source paths, including Windows directory junctions, without traversing them during staging or cleanup.
+- Preserve existing output directories and links on build failure, reject resource and metadata collisions with bundled virions, and retain supported license and notice files.
+- Handle numeric-leading package names and attributed anonymous classes correctly when preparing namespaces and inspecting source.
+- Close shading guard gaps involving imported aliases, named arguments and argument unpacking while preserving supported static references.
+- Apply semantic version precedence consistently when selecting virions, including prereleases, build metadata and large version components.
+- Reject empty plugin API lists, invalid source paths and malformed release tags with clear diagnostics; support qualified server command aliases.
+- Remove duplicate validation and unused imports, align PHPStan with PHP 8.4, expand regression coverage and shorten documentation.
+
 ## 1.0.16 - 2026-10-20
 
 - Raise DevTools' minimum PHP version to 8.4 and run the full CI quality gate on PHP 8.4 and 8.5.

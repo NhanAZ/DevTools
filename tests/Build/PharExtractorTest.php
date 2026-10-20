@@ -47,9 +47,34 @@ final class PharExtractorTest extends TestCase
         yield 'windows drive path' => ['C:\\outside.php'];
         yield 'windows drive-relative path' => ['C:outside.php'];
         yield 'null byte' => ["safe.php\0outside.php"];
+        yield 'control character' => ["unsafe\x01.php"];
+        yield 'unit separator' => ["unsafe\x1f.php"];
+        yield 'newline' => ["unsafe\n.php"];
         yield 'alternate data stream' => ['safe.php:stream'];
         yield 'trailing dot' => ['safe./file.php'];
         yield 'reserved device' => ['CON/file.php'];
+    }
+
+    public function test_nonportable_path_is_rejected_before_changing_existing_output(): void
+    {
+        $destination = $this->temporaryDirectory . '/extracted';
+        $this->filesystem->ensureDirectory($destination);
+        file_put_contents($destination . '/plugin.yml', 'original');
+
+        try {
+            (new PharExtractor($this->filesystem))->extract(
+                new FakeArchiveReader([
+                    new ArchiveEntry('plugin.yml', 'replacement'),
+                    new ArchiveEntry("unsafe\n.php", 'invalid'),
+                ]),
+                $destination,
+                true,
+            );
+            self::fail('Expected portable path validation.');
+        } catch (BuildException $error) {
+            self::assertStringContainsString('unsafe archive entry', $error->getMessage());
+        }
+        self::assertSame('original', file_get_contents($destination . '/plugin.yml'));
     }
 
     public function test_existing_file_is_not_overwritten_without_permission(): void

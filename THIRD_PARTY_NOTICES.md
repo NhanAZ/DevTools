@@ -19,7 +19,7 @@ The following projects were inspected for behavior and architecture. No source f
 - poggit/devirion `pm5` at `cf0d009b3b9120c16ef4663e7ea02257a66dc8ea` - Apache-2.0
 - SOF3/pharynx `0.3.8` at `7d82d3ed471174735ec4f6c43a4836b1c3fef66d` - Apache-2.0
 
-Additional source comparisons for the unreleased dependency/CI work:
+Additional dependency and CI references:
 
 - poggit/devirion at `4fa0f581eac0391fae8c8cd51ba667ceaa19b2e7` - shared discovery/loading behavior; see [dependency evidence](docs/dependencies.md).
 - axolotl-pm/pmmp-plugin-actions at `1280814dfdab491b8cec1defd167a1cc3aefe6c7` - build, tag validation and nightly publication behavior; see [Actions decisions](docs/github-actions.md).

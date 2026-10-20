@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NhanAZ\DevTools\Build;
 
+use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\Path;
 use NhanAZ\DevTools\Support\YamlReader;
 use NhanAZ\DevTools\Validation\PluginManifestReader;
@@ -272,7 +273,7 @@ final class ComposerVirionPlan
     /** @return array<string, mixed> */
     public function readJson(string $path): array
     {
-        if (!is_file($path) || is_link($path)) {
+        if (!is_file($path) || Filesystem::isLink($path)) {
             throw new BuildException("Missing or unsafe {$path}. Run composer install --no-dev --no-scripts --no-plugins explicitly before prepare.");
         }
         $contents = file_get_contents($path);

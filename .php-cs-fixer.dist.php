@@ -18,6 +18,7 @@ return (new Config())
         'final_class' => true,
         'fully_qualified_strict_types' => true,
         'no_superfluous_phpdoc_tags' => true,
+        'no_unused_imports' => true,
         'ordered_imports' => true,
         'php_unit_method_casing' => ['case' => 'snake_case'],
         'single_quote' => true,

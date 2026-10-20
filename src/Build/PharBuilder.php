@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace NhanAZ\DevTools\Build;
 
-use function dirname;
 use function file_exists;
 
 use FilesystemIterator;
@@ -14,7 +13,6 @@ use function in_array;
 use function ini_get;
 use function is_dir;
 use function is_file;
-use function is_link;
 
 use NhanAZ\DevTools\Support\Filesystem;
 use NhanAZ\DevTools\Support\Path;
@@ -45,6 +43,8 @@ use function unlink;
 
 final class PharBuilder
 {
+    private const NOTICE_FILES = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING', 'COPYING.md', 'NOTICE', 'NOTICE.md', 'THIRD_PARTY_NOTICES.md'];
+
     public function __construct(
         private readonly Filesystem $filesystem,
         private readonly PluginProjectValidator $validator,
@@ -99,7 +99,7 @@ final class PharBuilder
             : ['NhanAZ\\DevTools', 'poggit\\virion'];
         $forbiddenStandaloneNamespaces = array_merge($availableAntigens, $developmentOnlyNamespaces);
 
-        if (is_link($outputDirectory)) {
+        if (Filesystem::isLink($outputDirectory)) {
             throw new BuildException("Refusing symbolic-link build output directory: {$outputDirectory}");
         }
         $this->filesystem->ensureDirectory($outputDirectory);
@@ -116,9 +116,7 @@ final class PharBuilder
             );
         }
         $outputPath = Path::join($outputDirectory, $manifest->description->getName() . '.phar');
-        if (file_exists($outputPath) && !$overwrite) {
-            throw new BuildException("Refusing to replace existing build {$outputPath}. Run the build again with overwrite explicitly enabled.");
-        }
+        $this->assertOutputDestination($outputPath, $overwrite);
 
         $nonce = bin2hex(random_bytes(8));
         $stage = Path::join($outputDirectory, '.devtools-stage-' . $nonce);
@@ -191,7 +189,7 @@ final class PharBuilder
             );
         }
 
-        foreach (['LICENSE', 'LICENSE.md', 'COPYING', 'NOTICE', 'THIRD_PARTY_NOTICES.md'] as $notice) {
+        foreach (self::NOTICE_FILES as $notice) {
             $sourceNotice = $projectRoot . DIRECTORY_SEPARATOR . $notice;
             if (is_file($sourceNotice)) {
                 $this->filesystem->copyFile($sourceNotice, $stage . DIRECTORY_SEPARATOR . $notice);
@@ -300,9 +298,9 @@ final class PharBuilder
         $pluginNamespace = $separator === false ? '' : substr($main, 0, $separator);
         $base = $sourcePrefix !== '' ? $sourcePrefix : $pluginNamespace;
         if ($base === '') {
-            $base = 'DevToolsShade\\' . preg_replace('/[^A-Za-z0-9_]/', '_', $plugin->description->getName());
+            $base = 'DevToolsShade\\' . preg_replace('/^(?=[0-9])|[^A-Za-z0-9_]/', '_', $plugin->description->getName());
         }
-        $name = preg_replace('/[^A-Za-z0-9_]/', '_', $virion->manifest->name);
+        $name = preg_replace('/^(?=[0-9])|[^A-Za-z0-9_]/', '_', $virion->manifest->name);
         $digest = substr(hash('sha256', strtolower($plugin->description->getName() . '|' . $virion->manifest->name . '|' . $virion->manifest->antigen)), 0, 12);
 
         return $base . '\\_DevTools\\' . $name . '_' . $digest;
@@ -313,12 +311,19 @@ final class PharBuilder
         $resources = $virion->location . '/resources';
         if (is_dir($resources)) {
             $target = $stage . '/resources/devtools-virions/' . $virion->manifest->name;
+            if (file_exists($target)) {
+                throw new BuildException("Virion resource output collides with an existing plugin path: {$target}");
+            }
             $this->filesystem->copyTree($resources, $target);
         }
-        foreach (['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'COPYING', 'COPYING.md', 'NOTICE', 'NOTICE.md', 'THIRD_PARTY_NOTICES.md', 'devtools-provenance.json'] as $license) {
+        $metadata = $stage . '/META-INF/virions/' . $virion->manifest->name;
+        if (file_exists($metadata)) {
+            throw new BuildException("Virion metadata output collides with an existing plugin path: {$metadata}");
+        }
+        foreach ([...self::NOTICE_FILES, 'devtools-provenance.json'] as $license) {
             $source = $virion->location . '/' . $license;
             if (is_file($source)) {
-                $this->filesystem->copyFile($source, $stage . '/META-INF/virions/' . $virion->manifest->name . '/' . $license);
+                $this->filesystem->copyFile($source, $metadata . '/' . $license);
             }
         }
     }
@@ -386,11 +391,9 @@ final class PharBuilder
 
     private function installOutput(string $temporary, string $output, bool $overwrite): void
     {
+        $this->assertOutputDestination($output, $overwrite);
         $backup = null;
         if (file_exists($output)) {
-            if (!$overwrite) {
-                throw new BuildException("Refusing to replace existing build {$output}.");
-            }
             $backup = $output . '.backup-' . bin2hex(random_bytes(4));
             if (!rename($output, $backup)) {
                 throw new BuildException("Cannot move existing output aside before replacement: {$output}");
@@ -407,6 +410,16 @@ final class PharBuilder
         }
         if ($backup !== null && file_exists($backup) && !unlink($backup)) {
             throw new BuildException("Build succeeded, but the old backup could not be removed: {$backup}");
+        }
+    }
+
+    private function assertOutputDestination(string $output, bool $overwrite): void
+    {
+        if (Filesystem::isLink($output) || (file_exists($output) && !is_file($output))) {
+            throw new BuildException("Build output is not a regular file: {$output}. Choose a different output directory or move the existing path.");
+        }
+        if (file_exists($output) && !$overwrite) {
+            throw new BuildException("Refusing to replace existing build {$output}. Run the build again with overwrite explicitly enabled.");
         }
     }
 

@@ -98,12 +98,11 @@ final class PhpSourceInspector
         $count = count($tokens);
         for (++$index; $index < $count; ++$index) {
             $token = $tokens[$index];
-            if (is_array($token) && $token[0] === T_STRING) {
-                return $token[1];
+            if (is_array($token) && in_array($token[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) {
+                continue;
             }
-            if (is_string($token) && ($token === '{' || $token === '(' || $token === ';')) {
-                return null;
-            }
+
+            return is_array($token) && $token[0] === T_STRING ? $token[1] : null;
         }
 
         return null;
