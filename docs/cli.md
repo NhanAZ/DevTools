@@ -4,7 +4,7 @@ The CLI uses the same validation, dependency selection, builder and extractor as
 
 ## Install and run
 
-Use PHP 8.1 or newer with the extensions required by the locked Axolotl-PM packages, including YAML, and Composer. Install DevTools's locked dependencies including development packages. The CLI uses Axolotl-PM's manifest types without starting a server.
+Use PHP 8.4 or newer with the extensions required by the locked Axolotl-PM packages, including YAML, and Composer. Install DevTools's locked dependencies including development packages. The CLI uses Axolotl-PM's manifest types without starting a server.
 
 ```sh
 composer install --no-scripts --no-plugins

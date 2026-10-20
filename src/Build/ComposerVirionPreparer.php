@@ -118,7 +118,7 @@ final class ComposerVirionPreparer
                     }
                     $requirements[] = ['name' => ComposerVirionPlan::localName($dependency), 'version' => $plan->version($packages[$dependency])];
                 }
-                $manifest = ['name' => $localName, 'version' => $plan->version($package), 'antigen' => $antigen, 'php' => ['8.1'], 'virions' => $requirements];
+                $manifest = ['name' => $localName, 'version' => $plan->version($package), 'antigen' => $antigen, 'php' => ['8.4'], 'virions' => $requirements];
                 $platform = [];
                 foreach ($plan->object($package['require'] ?? [], $name) as $dependency => $constraint) {
                     if (!str_contains($dependency, '/') && !str_starts_with($dependency, 'composer-')) {

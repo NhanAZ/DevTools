@@ -59,7 +59,7 @@ final class VirionManifestReader
         }
         foreach ($php as $phpVersion) {
             if (preg_match('/^\d+\.\d+(?:\.\d+)?$/D', $phpVersion) !== 1) {
-                throw new VirionException("Cannot load virion {$name}: php contains invalid version \"{$phpVersion}\". Use a version such as 8.1.");
+                throw new VirionException("Cannot load virion {$name}: php contains invalid version \"{$phpVersion}\". Use a version such as 8.4.");
             }
         }
 

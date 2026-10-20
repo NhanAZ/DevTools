@@ -27,7 +27,7 @@ on:
         default: false
       php-version:
         type: string
-        default: '8.1'
+        default: '8.4'
     outputs:
       artifact-id:
         value: ${{ jobs.build.outputs.artifact-id }}

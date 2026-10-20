@@ -43,7 +43,7 @@ It does not download plugin or virion source during server startup or normal bui
 
 ## Requirements
 
-- PHP `8.1` or newer, 64-bit, with the extensions required by the server
+- PHP `8.4` or newer, 64-bit, with the extensions required by the server
 - Axolotl-PM with the API declared by `plugin.yml`
 - `phar.readonly=0` only when building PHARs
 

@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 final class RepositoryMetadataTest extends TestCase
 {
-    private const VERSION = '1.0.15';
+    private const VERSION = '1.0.16';
     private const PHP_ACTION_COMMIT = 'b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e';
 
     public function test_release_version_is_synchronized(): void
@@ -29,6 +29,14 @@ final class RepositoryMetadataTest extends TestCase
         self::assertIsArray($devtools);
         self::assertSame(self::VERSION, $devtools['release-version'] ?? null);
         self::assertSame(self::VERSION, $plugin['version'] ?? null);
+        $require = $composer['require'] ?? null;
+        self::assertIsArray($require);
+        self::assertSame('^8.4', $require['php'] ?? null);
+        $config = $composer['config'] ?? null;
+        self::assertIsArray($config);
+        $platform = $config['platform'] ?? null;
+        self::assertIsArray($platform);
+        self::assertSame('8.4.0', $platform['php'] ?? null);
         $requireDev = $composer['require-dev'] ?? null;
         self::assertIsArray($requireDev);
         self::assertSame('5.49.1', $requireDev['axolotl-pm/pocketmine-mp'] ?? null);
@@ -61,7 +69,7 @@ final class RepositoryMetadataTest extends TestCase
         self::assertIsString($reusable);
         self::assertStringContainsString('pull_request:', $ci);
         self::assertStringContainsString('branches: [main]', $ci);
-        self::assertStringContainsString("php: ['8.1', '8.2']", $ci);
+        self::assertStringContainsString("php: ['8.4', '8.5']", $ci);
         self::assertStringContainsString('run: composer check', $ci);
         self::assertStringContainsString('contents: read', $ci);
         self::assertStringContainsString('workflow_dispatch:', $release);

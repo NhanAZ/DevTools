@@ -40,7 +40,7 @@ PHAR tests and builds must use `phar.readonly=0`. Composer scripts already do th
 
 ## Coding conventions
 
-- PHP 8.1 baseline, `declare(strict_types=1);`, PSR-4.
+- PHP 8.4 baseline, `declare(strict_types=1);`, PSR-4.
 - Typed properties and explicit parameter and return types.
 - Constructor injection for dependencies. Use final classes by default.
 - No `eval`, shell construction, error suppression, hidden network access, or mutable global registry.

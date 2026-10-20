@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.16 - 2026-10-20
+
+- Raise DevTools' minimum PHP version to 8.4 and run the full CI quality gate on PHP 8.4 and 8.5.
+- Use PHP 8.4 by default in the reusable build and publication workflows.
+- Generate prepared Composer virion metadata with DevTools' PHP 8.4 baseline.
+
 ## 1.0.15 - 2026-10-14
 
 - Require a packaging identity string compared with `__CLASS__` to exactly match the original enclosing class name. This prevents an unrelated namespace prefix from bypassing the standalone namespace reference guard.

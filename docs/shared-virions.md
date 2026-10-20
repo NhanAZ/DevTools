@@ -18,7 +18,7 @@ name: ExampleVirion
 version: 1.2.3
 antigen: Example\Virion
 api: 5.0.0
-# php: 8.1               optional PHP compatibility
+# php: 8.4               optional PHP compatibility
 ```
 
 `name`, semantic `version`, `antigen`, and at least one of `api` or `php` are required. Every declared class must remain below the antigen and match its path and letter case.

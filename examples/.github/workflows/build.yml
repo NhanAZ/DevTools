@@ -32,14 +32,14 @@ jobs:
       - name: Set up Axolotl-PM PHP on Node.js 24
         shell: bash
         env:
-          INPUT_PHP-VERSION: "8.1"
+          INPUT_PHP-VERSION: "8.4"
           INPUT_PM-VERSION-MAJOR: "5"
           INPUT_INSTALL-PATH: ./.php-bin
         run: node "$GITHUB_WORKSPACE/.devtools-dependencies/setup-php-action/dist/index.js"
 
       - name: Build standalone plugin PHAR
         id: build
-        uses: NhanAZ/DevTools@v1.0.15
+        uses: NhanAZ/DevTools@v1.0.16
         with:
           project: HelloShared
           virions: .

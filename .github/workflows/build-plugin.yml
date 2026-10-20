@@ -21,7 +21,7 @@ on:
       php-version:
         description: PHP version supplied by axolotl-pm/setup-php-action.
         required: false
-        default: '8.1'
+        default: '8.4'
         type: string
       pm-version-major:
         description: Axolotl-PM server major version supplied by the PHP setup helper.

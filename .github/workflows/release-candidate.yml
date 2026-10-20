@@ -48,7 +48,7 @@ jobs:
       - name: Set up Axolotl-PM PHP on Node.js 24
         shell: bash
         env:
-          INPUT_PHP-VERSION: "8.1"
+          INPUT_PHP-VERSION: "8.4"
           INPUT_PM-VERSION-MAJOR: "5"
           INPUT_INSTALL-PATH: ./.php-bin
         run: node "$GITHUB_WORKSPACE/.devtools-dependencies/setup-php-action/dist/index.js"
@@ -59,8 +59,8 @@ jobs:
           path: |
             ~/.cache/composer/files
             ~/.cache/composer/vcs
-          key: composer-v2-${{ runner.os }}-php-8.1-${{ hashFiles('composer.lock') }}
-          restore-keys: composer-v2-${{ runner.os }}-php-8.1-
+          key: composer-v2-${{ runner.os }}-php-8.4-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-v2-${{ runner.os }}-php-8.4-
 
       - name: Install locked dependencies
         run: composer install --prefer-dist --no-interaction --no-progress --no-scripts --no-plugins
