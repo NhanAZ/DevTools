@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 1.0.18 - 2026-10-20
 
-- Verify Axolotl-PM 5.50.0 and synchronize the development dependency, CI and compatibility monitor with its source commit. Keep runtime smoke servers on loopback RakNet.
+- Verify Axolotl-PM 5.50.0 and synchronize the development dependency, CI and compatibility monitor with source commit `fe5b3dee173b5e839783ab6fb7280005aa0a4d73`.
+- Update the locked server dependencies to BedrockProtocol 63.0.1 and NetherNet 0.3.1. Development installations now require `ext-webrtc`.
+- Keep runtime smoke servers on loopback RakNet and add regression coverage for workflow pins drifting from the lockfile.
 
 ## 1.0.17 - 2026-10-20
 
