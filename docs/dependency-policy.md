@@ -6,7 +6,9 @@ DevTools targets Axolotl-PM only. Folder loading, virion selection, dependency p
 
 The accepted Composer runtime requirements are PHP `^8.4`, `ext-json`, `ext-phar`, `ext-yaml`, and `nikic/php-parser:^5.6`. The parser is essential for AST-based shading and its existing license is retained. The current lock selects `nikic/php-parser` `v5.9.0`.
 
-The accepted development requirements are `friendsofphp/php-cs-fixer:^3.64`, `phpstan/phpstan:^2.1`, `phpunit/phpunit:^10.5`, and `axolotl-pm/pocketmine-mp:5.49.1`. Axolotl-PM is pinned by `composer.lock`, rather than resolved afresh for a test run. Packages such as Symfony components or Composer utilities are dependencies of those tools/server packages, not direct runtime dependencies introduced by DevTools.
+The accepted development requirements are `friendsofphp/php-cs-fixer:^3.64`, `phpstan/phpstan:^2.1`, `phpunit/phpunit:^10.5`, and `axolotl-pm/pocketmine-mp:5.50.0`. Axolotl-PM is pinned by `composer.lock`, rather than resolved afresh for a test run. Packages such as Symfony components or Composer utilities are dependencies of those tools/server packages, not direct runtime dependencies introduced by DevTools.
+
+Axolotl-PM 5.50.0 requires BedrockProtocol 63.0.1 and NetherNet 0.3.1 in the current lock. Installing the development dependencies therefore also requires `ext-webrtc`; use a current Axolotl-PM PHP binary.
 
 The standalone CLI currently uses Axolotl-PM manifest value objects from the development installation. Consequently, its documented source-checkout installation includes development dependencies, even though it never starts a server. On a server, Axolotl-PM itself supplies those classes. The shipped DevTools plugin PHAR does not contain Axolotl-PM, PHPUnit, PHPStan, PHP CS Fixer, or Composer's autoloader.
 

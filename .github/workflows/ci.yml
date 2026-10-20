@@ -18,7 +18,7 @@ jobs:
     name: Build pinned fixture with PHPStan max
     uses: ./.github/workflows/build-plugin.yml
     with:
-      axolotl-ref: dfe0d07e48a9e8d5a4a242fa43ff1cd3b743a955
+      axolotl-ref: fe5b3dee173b5e839783ab6fb7280005aa0a4d73
       project: tests/Fixtures/ValidPlugin
       phpstan: max
 

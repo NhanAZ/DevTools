@@ -39,7 +39,7 @@ final class RepositoryMetadataTest extends TestCase
         self::assertSame('8.4.0', $platform['php'] ?? null);
         $requireDev = $composer['require-dev'] ?? null;
         self::assertIsArray($requireDev);
-        self::assertSame('5.49.1', $requireDev['axolotl-pm/pocketmine-mp'] ?? null);
+        self::assertSame('5.50.0', $requireDev['axolotl-pm/pocketmine-mp'] ?? null);
         self::assertArrayNotHasKey('pocketmine/pocketmine-mp', $requireDev);
         self::assertIsString($changelog);
         self::assertStringContainsString('## ' . self::VERSION . ' -', $changelog);
@@ -115,6 +115,39 @@ final class RepositoryMetadataTest extends TestCase
             self::assertStringNotContainsString('|| true', $workflow);
             self::assertStringNotContainsString('pull_request_target', $workflow);
         }
+    }
+
+    public function test_server_workflow_baselines_match_the_locked_dependency(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $lockContents = file_get_contents($root . '/composer.lock');
+        $ci = file_get_contents($root . '/.github/workflows/ci.yml');
+        $monitor = file_get_contents($root . '/.github/workflows/axolotl-compatibility.yml');
+        self::assertIsString($lockContents);
+        self::assertIsString($ci);
+        self::assertIsString($monitor);
+        $lock = json_decode($lockContents, true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($lock);
+        $packages = $lock['packages-dev'] ?? null;
+        self::assertIsArray($packages);
+        foreach ($packages as $package) {
+            self::assertIsArray($package);
+            if (($package['name'] ?? null) !== 'axolotl-pm/pocketmine-mp') {
+                continue;
+            }
+            $version = $package['version'] ?? null;
+            $source = $package['source'] ?? null;
+            self::assertIsString($version);
+            self::assertIsArray($source);
+            $reference = $source['reference'] ?? null;
+            self::assertIsString($reference);
+            self::assertMatchesRegularExpression('/^[a-f0-9]{40}$/', $reference);
+            self::assertStringContainsString('axolotl-ref: ' . $reference, $ci);
+            self::assertStringContainsString('BASELINE_TAG: "' . $version . '"', $monitor);
+            self::assertStringContainsString('BASELINE_SHA: ' . $reference, $monitor);
+            return;
+        }
+        self::fail('The server dependency must be present in composer.lock.');
     }
 
     public function test_compatibility_monitor_checks_the_pinned_builder_version(): void

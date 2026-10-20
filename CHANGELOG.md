@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Verify Axolotl-PM 5.50.0 and synchronize the development dependency, CI and compatibility monitor with its source commit. Keep runtime smoke servers on loopback RakNet.
+
 ## 1.0.17 - 2026-10-20
 
 - Reject linked source paths, including Windows directory junctions, without traversing them during staging or cleanup.

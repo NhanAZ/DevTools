@@ -143,7 +143,7 @@ try {
     foreach (['shared-folder', 'shared-phar', 'private-phar'] as $mode) {
         $data = $run . '/' . $mode;
         smokeWrite($data . '/server.properties', "language=eng\nserver-ip=127.0.0.1\nserver-port=0\nenable-ipv6=off\nenable-query=off\nxbox-auth=off\nlevel-type=FLAT\nview-distance=2\nmax-players=1\n");
-        smokeWrite($data . '/pocketmine.yml', "settings:\n  async-workers: 2\n  enable-dev-builds: true\n  send-usage: false\nauto-report:\n  enabled: false\nauto-updater:\n  enabled: false\nnetwork:\n  upnp-forwarding: false\n");
+        smokeWrite($data . '/pocketmine.yml', "settings:\n  async-workers: 2\n  enable-dev-builds: true\n  send-usage: false\nauto-report:\n  enabled: false\nauto-updater:\n  enabled: false\nnetwork:\n  upnp-forwarding: false\ntransport:\n  name: raknet\n");
         $private = $mode === 'private-phar';
         $plain = $private ? $run . '/inputs/SmokePlain' : $data . '/plugins/SmokePlain';
         smokeWrite($plain . '/plugin.yml', "name: SmokePlain\nversion: 1.0.0\nmain: RuntimeSmoke\\Plain\\Main\napi: 5.0.0\nsrc-namespace-prefix: RuntimeSmoke\\Plain\n");
