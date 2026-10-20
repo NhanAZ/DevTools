@@ -14,6 +14,27 @@ The standalone CLI currently uses Axolotl-PM manifest value objects from the dev
 
 PHP 8.4 is the source, CLI and build minimum. The complete CI quality gate runs on PHP 8.4 and 8.5. Axolotl-PM runtime smoke evidence identifies its actual PHP version separately; this release's runtime smoke is on PHP 8.4.24 ZTS and does not claim a PHP 8.5 server test.
 
+## Abandoned server dependencies
+
+Reviewed on 2026-10-20. All ten packages below are required by [Axolotl-PM 5.50.0](https://github.com/axolotl-pm/PocketMine-MP/blob/fe5b3dee173b5e839783ab6fb7280005aa0a4d73/composer.json) and appear in the development section of DevTools' lockfile. Packagist marks each abandoned without a suggested replacement; their source repositories are archived.
+
+| Package | Locked version |
+| --- | --- |
+| `pocketmine/binaryutils` | `0.2.7` |
+| `pocketmine/callback-validator` | `1.0.4` |
+| `pocketmine/color` | `0.3.1` |
+| `pocketmine/errorhandler` | `0.7.1` |
+| `pocketmine/log` | `0.4.0` |
+| `pocketmine/math` | `1.0.0` |
+| `pocketmine/nbt` | `1.2.0` |
+| `pocketmine/raklib` | `1.2.1` |
+| `pocketmine/raklib-ipc` | `1.0.1` |
+| `pocketmine/snooze` | `0.5.0` |
+
+`composer outdated "pocketmine/*" --locked` reported all ten at their latest stable versions. A targeted update with `--minimal-changes --dry-run` proposed no lockfile changes. Retain these versions until a compatible replacement is verified with Axolotl-PM: removing them would leave required server classes unavailable, including in the source-checkout CLI installation. Review again by 2026-11-20, or when the server pin changes, a replacement is published, or an advisory appears.
+
+`composer audit --locked` reported no vulnerability advisories and ten abandoned-package findings. The full audit remains enabled and returns nonzero for these findings. `composer audit --locked --no-dev` reported no findings, but excludes the dependencies needed by the source-checkout CLI. The PHAR gate below checks the separate shipped-plugin boundary.
+
 ## Artifact boundary
 
 The self-build's `devtools.yml` includes only `vendor/nikic/php-parser/lib` and its license. `bin/validate-artifact.php` enforces that allowlist against the actual PHAR, in addition to its existing signature, manifest, secret and development-file checks. Regression tests deliberately add QA, server or Composer bootstrap files to a valid artifact and require the release gate to reject them.
